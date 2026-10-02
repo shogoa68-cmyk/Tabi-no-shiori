@@ -22,12 +22,18 @@
   - 出す条件：iPhoneのSafari、またはバックアップが一度もない／7日以上前。「あとで」で3日間かくす
   - 起動時に `navigator.storage.persist()` を呼ぶ
 - クラウド保存（「旅の設定・バックアップ」の中。だれにでも表示）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン。supabase-js は起動時に読みこむ（読めなくても手元保存で動く）
-  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS。likes・routes はみんなで版で追加）
+  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS）と `002_share.sql`（profiles / trip_invites / spot_likes / routes ＋ 招待の関数 `preview_invite`・`join_trip`）。002 が未実行でも場所の同期は動き、共有の欄だけ隠れる（`cloud.features`）
   - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
   - 同期：localStorage が手元のコピー。変更は `cloudMark(id, "up"|"del")`／`cloudMarkTrip()` で印をつけ、`runSync()` が送る→受け取る（クラウドが正。未送信の変更だけ手元を優先）
   - 同期の帳面は localStorage `tabi-navi-sync`（userId・tripId・dirty・orphans など）。新しい場所の id は uuid。古い id はハッシュで決まった uuid に変える（端末がちがっても同じ id になる）
   - はじめてつないだ端末にクラウドにない場所があれば、自動で送らずに「追加しますか？」と聞く（ほかの端末で消した場所がよみがえらないように）
-  - 旅のメモ（trip-memo）は trips.memo に保存。いまは1人1つの旅だけ使う
+  - 旅のメモ（trip-memo）は trips.memo に保存（旅ごと）
+- みんなで使う（ログイン中・002 実行ずみのとき）：
+  - 旅は何個でも作れる。画面の旅の欄で切りかえ・名前変更・削除（オーナーだけ）・ぬける（オーナー以外）。切りかえる前に必ず今の旅の未送信分を送る（電波がなければ切りかえない）
+  - 招待：「招待リンクを作る」→ `?join=コード`（7日・1回だけ）。受ける側はコードを localStorage `tabi-navi-join` に覚え、ログイン後に `preview_invite` で旅の名前を見せて、「参加する」で `join_trip`。参加待ちの人には自分の旅を自動で作らない。オーナーはメンバーを外せる
+  - 旅がなくなった（削除された・外された）ときは、その旅の場所とメモを手元からも消してから別の旅につなぐ（別の旅に混ざらないように）
+  - いいね（`spot_likes`）・保存したルート（`routes`）・名前（`profiles`、Googleの名前）は、同期の帳面を通さず直接書く（いいねは先に画面を変えて、失敗したら戻す）。場所には `by`（追加した人）が入る。メンバーが2人以上のときだけ「追加：○○」「いいねの名前」「お願い文の行きたい○人」を出す
+  - テスト：本物のSupabaseにはつなげないので、Node で作った「Supabase のふり」（表・RLS・招待・rpc）で2人分の流れを確かめた
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗・4秒たっても返事がないときは緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）
@@ -66,4 +72,4 @@
 - Claude が返したルートを貼り付けて保存・表示する欄
 - オフラインでも開けるようにする（Service Worker / PWA）
 - 将来：ボタンだけでルートを出す（Supabase Edge Function ＋ Claude API。APIキーは絶対にページに書かない）
-- 保留中：みんなで場所を集める版（Supabase：trips / spots / likes / routes ＋ 匿名ログイン ＋ RLS）。設計は別にあり、旅行後に再開予定
+- みんなで使う版の続き：旅ごとの日付・日ごとのグループ分け、変更をリアルタイムで反映（Supabase Realtime）、招待のメール通知

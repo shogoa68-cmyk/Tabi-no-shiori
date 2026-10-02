@@ -89,6 +89,15 @@ details.card[open] > summary{margin-bottom:10px}
 .quick button{flex:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 12px;cursor:pointer}
 .go{font-family:var(--display);font-size:17px;width:100%;padding:13px}
 .toast{position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:99px;font-size:13px;z-index:6;max-width:90vw}
+/* みんなで使う版 */
+.likes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.like{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:2px 11px;cursor:pointer}
+.like[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+details.rt{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)}
+details.rt > summary{cursor:pointer;font-size:14px;font-weight:700;overflow-wrap:anywhere}
+details.rt[open] > summary{margin-bottom:8px}
+#trip-select{font-weight:700}
+.mem{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:14px}
 /* データを守る案内 */
 .guard{border-color:var(--star);background:var(--warn-soft)}
 .guard ol{margin:0;padding-left:1.4em}
@@ -102,6 +111,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <div class="eyebrow">いまから旅ナビ</div>
     <h1 style="font-size:24px">ここから、どこへ行こう？</h1>
   </header>
+
+  <!-- 旅への招待 -->
+  <section class="card stack guard" id="join-card" hidden aria-labelledby="h-join">
+    <h2 id="h-join" style="font-size:16px">旅への招待</h2>
+    <p class="note" style="color:var(--ink)" id="join-text"></p>
+    <div class="row">
+      <button class="btn small" type="button" id="join-yes" hidden>参加する</button>
+      <button class="btn small" type="button" id="join-login" hidden>Googleでログイン</button>
+      <button class="link" type="button" id="join-no">やめる</button>
+    </div>
+  </section>
 
   <!-- データを守る案内（ホーム画面に追加・バックアップ） -->
   <section class="card stack guard" id="guard" hidden aria-labelledby="h-guard">
@@ -149,6 +169,26 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <h2 id="h-spots">行きたい場所 <span class="note" id="count"></span></h2>
       <label class="row" style="flex-direction:row;gap:6px;font-size:13px"><input type="checkbox" id="show-done" style="width:auto"> 行った所も表示</label>
     </div>
+    <section class="card stack" id="trip-card" hidden aria-label="旅の切りかえ" style="gap:8px">
+      <div class="row" style="flex-wrap:nowrap">
+        <select id="trip-select" aria-label="旅を選ぶ" style="flex:1"></select>
+        <button class="btn ghost small" type="button" id="trip-new">新しい旅</button>
+      </div>
+      <div class="row" style="gap:14px">
+        <button class="link" type="button" id="trip-invite">招待リンクを作る</button>
+        <button class="link" type="button" id="trip-members-btn">メンバー</button>
+        <button class="link" type="button" id="trip-rename">名前を変える</button>
+        <button class="link" type="button" id="trip-leave" hidden>この旅からぬける</button>
+        <button class="link" type="button" id="trip-delete" hidden style="color:var(--star)">この旅を削除</button>
+      </div>
+      <div class="stack" id="trip-invite-box" hidden style="gap:6px">
+        <input id="invite-url" readonly aria-label="招待リンク">
+        <div class="row"><button class="btn small" type="button" id="invite-copy">コピー</button><button class="btn ghost small" type="button" id="invite-share" hidden>LINEなどで送る</button></div>
+        <p class="note">このリンクは7日間だけ使えて、使えるのは1回だけです。招待したい人ごとに作ってください。リンクを開いた人はGoogleでログインして参加します。</p>
+      </div>
+      <div class="stack" id="trip-members" hidden style="gap:4px"></div>
+      <p class="note" id="trip-note"></p>
+    </section>
     <div class="spots" id="spots"></div>
 
     <details class="card" id="add-box">
@@ -187,6 +227,18 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       </form>
     </details>
   </section>
+
+  <!-- 保存したルート（ログイン中・共有の表が使えるときだけ） -->
+  <details class="card" id="routes-card" hidden>
+    <summary>保存したルート <span class="note" id="routes-count"></span></summary>
+    <div class="stack">
+      <p class="note">Claudeが返したルートを貼り付けて保存すると、この旅のメンバーみんなで見られます。</p>
+      <label>題名（例：1日目）<input id="route-title" maxlength="60"></label>
+      <label>Claudeの返事<textarea id="route-body" maxlength="20000" style="min-height:120px" placeholder="Claudeの返事をコピーして、ここに貼り付け"></textarea></label>
+      <div class="row"><button class="btn small" type="button" id="route-save">保存する</button><span class="msg" id="route-msg"></span></div>
+      <div class="stack" id="route-list"></div>
+    </div>
+  </details>
 
   <!-- 設定・その他 -->
   <details class="card">
@@ -302,6 +354,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const SUPA_URL = "https://cnnwxwiqauyawngkpapk.supabase.co";
   const SUPA_KEY = "sb_publishable_A3y_3DhT3JNGVbOE3KEDxw_JQcz4JkS"; // publishable key（公開してよいキー。RLS で守る）
   let sb = null, session = null;
+  // クラウドから受け取った、いまの旅のまわりの情報（このページを開いている間だけ覚えておく）
+  const cloud = { features: null /* 共有の表が使えるか：null=不明 */, trips: [], members: [], names: {}, likes: {}, routes: [], savedProfileFor: null };
   function loadScript(src){
     return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); });
   }
@@ -328,58 +382,45 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const x = h.map(v => v.toString(16).padStart(2, "0")).join("");
     return `${x.slice(0,8)}-${x.slice(8,12)}-${x.slice(12,16)}-${x.slice(16,20)}-${x.slice(20)}`;
   }
-  // 画面の「場所」⇔ クラウドの行（spots の表）
+  // 画面の「場所」⇔ クラウドの行（spots の表）。by＝追加した人（クラウドから来たときだけ入る）
   const toRow = s => ({ id: s.id, trip_id: sync.tripId, name: s.name, prio: s.prio, area: s.area || "", address: s.address || "", stay: s.stay || null,
     hours: s.hours || "", closed: s.closed || "", kind: s.kind || "観光", when_text: s.when || "", map: s.map || "", memo: s.memo || "", done: !!s.done,
     created_at: new Date(s.created || Date.now()).toISOString() });
   const fromRow = r => ({ id: r.id, name: r.name, prio: r.prio, area: r.area, address: r.address, stay: r.stay, hours: r.hours, closed: r.closed,
-    kind: r.kind, when: r.when_text, map: r.map, memo: r.memo, done: r.done, created: Date.parse(r.created_at) });
+    kind: r.kind, when: r.when_text, map: r.map, memo: r.memo, done: r.done, created: Date.parse(r.created_at), by: r.created_by });
+  const me = () => session ? session.user.id : null;
+  const nameOf = uid => uid === me() ? "自分" : (cloud.names[uid] || "メンバー");
+  const likeIds = id => cloud.likes[id] || [];
+  const sharedOn = () => !!session && cloud.features === true && !!sync.tripId;
+  const featureMissing = e => !!e && (e.code === "PGRST205" || e.code === "42P01" || /schema cache|does not exist/i.test(e.message || ""));
+
+  // 招待リンク（?join=コード）で来たとき、ログインをはさんでも忘れないように覚えておく
+  const JOIN_KEY = "tabi-navi-join";
+  const getPendingJoin = () => { try { return localStorage.getItem(JOIN_KEY) || ""; } catch { return ""; } };
+  const setPendingJoin = c => { try { c ? localStorage.setItem(JOIN_KEY, c) : localStorage.removeItem(JOIN_KEY); } catch {} };
+  { const jp = new URLSearchParams(location.search).get("join");
+    if (jp && /^[0-9a-f]{32}$/i.test(jp)) { setPendingJoin(jp.toLowerCase()); history.replaceState(null, "", location.pathname); } }
 
   // 変更の印をつける（ログインしていなくてもつけておき、ログインしたら送る）
   function cloudMark(id, op){ sync.dirty[id] = op; saveSync(); scheduleSync(); }
   function cloudMarkTrip(){ sync.tripDirty = true; saveSync(); scheduleSync(); }
-  let syncTimer = null, syncing = false, syncAgain = false;
+  let syncTimer = null, syncPromise = null, syncAgain = false, wantTrip = null;
   function scheduleSync(delay = 800){ clearTimeout(syncTimer); syncTimer = setTimeout(runSync, delay); }
-
-  async function runSync(){
-    if (!sb || !session) { renderCloud(); return; }
-    if (syncing) { syncAgain = true; return; }
-    syncing = true; renderCloud("同期しています…");
-    try { await syncOnce(); sync.lastSync = Date.now(); saveSync(); renderCloud(); }
-    catch (e) { renderCloud("同期できませんでした。電波が戻ったら、もう一度送ります（" + (e.message || e) + "）"); }
-    syncing = false;
-    if (syncAgain) { syncAgain = false; scheduleSync(0); }
+  // 同期を1回やる。終わったら true（失敗したら false）を返す。やっている最中なら、その終わりを待つ
+  function runSync(){
+    if (!sb || !session) { renderCloud(); return Promise.resolve(false); }
+    if (syncPromise) { syncAgain = true; return syncPromise; }
+    renderCloud("同期しています…");
+    syncPromise = (async () => {
+      try { await syncOnce(); sync.lastSync = Date.now(); saveSync(); renderCloud(); return true; }
+      catch (e) { renderCloud("同期できませんでした。電波が戻ったら、もう一度送ります（" + (e.message || e) + "）"); return false; }
+      finally { syncPromise = null; if (syncAgain) { syncAgain = false; scheduleSync(0); } }
+    })();
+    return syncPromise;
   }
-  async function syncOnce(){
-    const uid = session.user.id;
-    if (sync.userId !== uid) sync = emptySync(uid); // はじめての人・別の人
-    // 古い形のidを uuid に変える（1回だけ）
-    let changed = false;
-    for (const sp of state.spots) if (!isUuid(sp.id)) { sp.id = await idFromOld(sp.id); changed = true; }
-    if (changed) save();
-    for (const k of Object.keys(sync.dirty)) if (!isUuid(k)) { const op = sync.dirty[k]; delete sync.dirty[k]; sync.dirty[await idFromOld(k)] = op; }
-    if (!sync.tripId) {
-      const { data: trips, error } = await sb.from("trips").select("id,memo").order("created_at");
-      if (error) throw error;
-      if (trips.length) {
-        // もうクラウドに旅がある：クラウドを正とする。手元にしかない場所は、勝手に送らずにあとで聞く
-        //（ほかの端末で消した場所が、よみがえらないように）
-        const { data: rows, error: e2 } = await sb.from("spots").select("id").eq("trip_id", trips[0].id);
-        if (e2) throw e2;
-        const there = new Set(rows.map(r => r.id));
-        sync.orphans = state.spots.filter(sp => !there.has(sp.id));
-        sync.dirty = {};
-        if (!trips[0].memo && state.settings["trip-memo"]) sync.tripDirty = true; // クラウドのメモが空なら、手元のメモを送る
-        sync.tripId = trips[0].id;
-      } else {
-        const { data: t, error: e2 } = await sb.from("trips").insert({ title: "私の旅", memo: state.settings["trip-memo"] || "" }).select("id").single();
-        if (e2) throw e2;
-        sync.tripId = t.id;
-        state.spots.forEach(sp => { sync.dirty[sp.id] = "up"; }); // 新しい旅：手元の場所を全部送る
-      }
-      saveSync();
-    }
-    // 1) 送る
+
+  // いまの旅の、まだ送っていない変更をクラウドに送る
+  async function pushDirty(){
     if (sync.tripDirty) {
       const { error } = await sb.from("trips").update({ memo: state.settings["trip-memo"] || "" }).eq("id", sync.tripId);
       if (error) throw error;
@@ -398,7 +439,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     }
     [...ups.map(x => x.id), ...dels].forEach(id => delete sync.dirty[id]);
     saveSync();
-    // 2) 受け取る（送っている間に変わった場所は、手元を優先）
+  }
+  // クラウドの場所と旅のメモを受け取る（送っている間に変わった場所は、手元を優先）
+  async function pullSpots(){
     const [{ data: rows, error: e4 }, { data: trip, error: e5 }] = await Promise.all([
       sb.from("spots").select("*").eq("trip_id", sync.tripId),
       sb.from("trips").select("memo").eq("id", sync.tripId).single()
@@ -411,12 +454,265 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (!sync.tripDirty && trip) { state.settings["trip-memo"] = trip.memo; if (document.activeElement !== $("trip-memo")) $("trip-memo").value = trip.memo; }
     save(); renderSpots();
   }
+  // メンバー・いいね・保存したルート・名前を受け取る（共有の表がまだ無くても、場所の同期はそのまま動くようにする）
+  async function pullMeta(){
+    const trip = sync.tripId;
+    const mem = await sb.from("trip_members").select("user_id,role").eq("trip_id", trip);
+    if (!mem.error) cloud.members = mem.data;
+    if (cloud.features !== false) {
+      const [lk, rt] = await Promise.all([
+        sb.from("spot_likes").select("spot_id,user_id"),
+        sb.from("routes").select("id,title,body,created_by,created_at").eq("trip_id", trip).order("created_at", { ascending: false })
+      ]);
+      if (featureMissing(lk.error) || featureMissing(rt.error)) cloud.features = false;
+      else if (!lk.error && !rt.error) {
+        cloud.features = true;
+        cloud.likes = {}; lk.data.forEach(r => { (cloud.likes[r.spot_id] = cloud.likes[r.spot_id] || []).push(r.user_id); });
+        cloud.routes = rt.data;
+      }
+    }
+    if (cloud.features) {
+      const ids = [...new Set([...cloud.members.map(m => m.user_id), ...cloud.routes.map(r => r.created_by), ...state.spots.map(x => x.by).filter(Boolean)])];
+      if (ids.length) { const pr = await sb.from("profiles").select("id,name").in("id", ids); if (!pr.error) pr.data.forEach(p => { cloud.names[p.id] = p.name; }); }
+    }
+    renderTripCard(); renderRoutes(); renderSpots();
+  }
+  // いまの旅の手元のコピー（場所・メモ・同期の印）をすべて捨てる。クラウドの中身は消さない
+  function dropLocalTrip(){
+    resetForm();
+    state.spots = []; state.settings["trip-memo"] = ""; $("trip-memo").value = "";
+    sync.tripId = null; sync.dirty = {}; sync.tripDirty = false; sync.orphans = []; sync.replaceAll = false;
+    cloud.members = []; cloud.likes = {}; cloud.routes = [];
+    save(); saveSync();
+  }
+  // 使う旅を切りかえる／はじめてつなぐ
+  //   first：はじめてつないだ端末。手元にしかない場所は、勝手に送らずにあとで聞く
+  //   switch：別の旅に入れかえる。手元の場所は前の旅のものなので、持ちこさない
+  async function adoptTrip(t, mode){
+    if (mode === "first") {
+      const { data: rows, error } = await sb.from("spots").select("id").eq("trip_id", t.id);
+      if (error) throw error;
+      const there = new Set(rows.map(r => r.id));
+      sync.orphans = state.spots.filter(sp => !there.has(sp.id));
+      sync.dirty = {}; sync.tripDirty = !t.memo && !!state.settings["trip-memo"]; // クラウドのメモが空なら、手元のメモを送る
+    } else {
+      resetForm();
+      state.spots = []; sync.orphans = []; sync.dirty = {}; sync.tripDirty = false; sync.replaceAll = false;
+      state.settings["trip-memo"] = t.memo || ""; $("trip-memo").value = t.memo || "";
+      cloud.likes = {}; cloud.routes = []; cloud.members = [];
+    }
+    sync.tripId = t.id; saveSync(); save();
+  }
+  async function syncOnce(){
+    const uid = session.user.id;
+    if (sync.userId !== uid) sync = emptySync(uid); // はじめての人・別の人
+    // 古い形のidを uuid に変える（1回だけ）
+    let changed = false;
+    for (const sp of state.spots) if (!isUuid(sp.id)) { sp.id = await idFromOld(sp.id); changed = true; }
+    if (changed) save();
+    for (const k of Object.keys(sync.dirty)) if (!isUuid(k)) { const op = sync.dirty[k]; delete sync.dirty[k]; sync.dirty[await idFromOld(k)] = op; }
+    // 自分の名前を、同じ旅の人に見せられるように保存する（ログインごとに1回）
+    if (cloud.savedProfileFor !== uid && cloud.features !== false) {
+      const md = session.user.user_metadata || {};
+      const name = String(md.full_name || md.name || (session.user.email || "").split("@")[0] || "").slice(0, 60);
+      const { error } = await sb.from("profiles").upsert({ id: uid, name });
+      if (error) { if (featureMissing(error)) cloud.features = false; } else cloud.savedProfileFor = uid;
+    }
+    // 1) 旅の一覧
+    const { data: trips, error } = await sb.from("trips").select("id,title,memo,created_by").order("created_at");
+    if (error) throw error;
+    cloud.trips = trips;
+    const find = id => trips.find(t => t.id === id);
+    // 旅がなくなった（削除された・メンバーから外された）：その旅の中身は手元からも消す（別の旅に混ざらないように）
+    if (sync.tripId && !find(sync.tripId)) dropLocalTrip();
+    // 2) いまの旅の変更を送る（旅を切りかえる前にも、必ず先に送る）
+    if (sync.tripId) await pushDirty();
+    // 3) どの旅を使うか決める
+    if (wantTrip && !find(wantTrip)) { wantTrip = null; throw new Error("その旅が見つかりません"); }
+    const target = wantTrip || sync.tripId;
+    if (target) { if (target !== sync.tripId) await adoptTrip(find(target), sync.tripId ? "switch" : "first"); }
+    else if (trips.length) await adoptTrip(trips[0], "first");
+    else if (getPendingJoin()) { sync.tripId = null; cloud.members = []; renderTripCard(); renderJoin(); return; } // 招待で参加する人：先に自分の旅は作らない
+    else {
+      const { data: t, error: e2 } = await sb.from("trips").insert({ title: "私の旅", memo: state.settings["trip-memo"] || "" }).select("id,title,memo,created_by").single();
+      if (e2) throw e2;
+      cloud.trips.push(t); sync.tripId = t.id; sync.orphans = [];
+      state.spots.forEach(sp => { sync.dirty[sp.id] = "up"; }); // 新しい旅：手元の場所を全部送る
+      saveSync();
+      await pushDirty();
+    }
+    wantTrip = null;
+    // 4) 受け取る
+    await pullSpots();
+    try { await pullMeta(); } catch { /* メンバーなどが取れなくても、場所の同期は成功のまま */ }
+    renderJoin();
+  }
+
+  // ---- 旅の切りかえ・招待・メンバー ----
+  function renderTripCard(){
+    const on = !!session && cloud.trips.length > 0 && !!sync.tripId;
+    $("trip-card").hidden = !on;
+    if (!on) return;
+    const sel = $("trip-select"); sel.textContent = "";
+    cloud.trips.forEach(t => { const o = document.createElement("option"); o.value = t.id; o.textContent = t.title || "旅"; sel.append(o); });
+    sel.value = sync.tripId;
+    const mine = cloud.members.find(m => m.user_id === me()), owner = !!mine && mine.role === "owner", share = cloud.features !== false;
+    $("trip-invite").hidden = !share; $("trip-members-btn").hidden = !share;
+    $("trip-delete").hidden = !owner; $("trip-leave").hidden = owner || !mine;
+    $("trip-note").textContent = share ? "" : "招待・いいね・ルート保存を使うには、Supabaseで 002_share.sql を実行してください。旅の切りかえは使えます。";
+    const box = $("trip-members"); box.textContent = "";
+    cloud.members.forEach(m => {
+      const r = el("div", "mem"); r.append(el("span", null, nameOf(m.user_id) + (m.role === "owner" ? "（オーナー）" : "")));
+      if (owner && m.user_id !== me()) { const b = el("button", "link", "外す"); b.type = "button"; b.onclick = () => removeMember(m.user_id); r.append(b); }
+      box.append(r);
+    });
+    if (!cloud.members.length) box.append(el("span", "note", "メンバーを読みこめませんでした"));
+  }
+  async function switchTrip(id){
+    if (!id || id === sync.tripId) return;
+    if (syncPromise) await syncPromise;
+    wantTrip = id;
+    const ok = await runSync();
+    if (!ok || sync.tripId !== id) { wantTrip = null; toast("旅を切りかえられませんでした。電波を確認して、もう一度ためしてください"); }
+    renderTripCard(); renderSpots();
+  }
+  $("trip-select").onchange = () => switchTrip($("trip-select").value);
+  $("trip-new").onclick = async () => {
+    const title = prompt("新しい旅の名前", "新しい旅"); if (title === null) return;
+    if (syncPromise) await syncPromise;
+    const { data, error } = await sb.from("trips").insert({ title: title.trim().slice(0, 60) || "新しい旅" }).select("id").single();
+    if (error) { toast("旅を作れませんでした。電波を確認してください"); return; }
+    switchTrip(data.id);
+  };
+  $("trip-rename").onclick = async () => {
+    const t = cloud.trips.find(x => x.id === sync.tripId); if (!t) return;
+    const title = prompt("旅の名前", t.title); if (title === null || !title.trim()) return;
+    const { error } = await sb.from("trips").update({ title: title.trim().slice(0, 60) }).eq("id", t.id);
+    if (error) { toast("名前を変えられませんでした"); return; }
+    t.title = title.trim().slice(0, 60); renderTripCard(); renderCloud();
+  };
+  // 旅からぬける・旅を削除したあとは、手元の場所とメモを空にして、ほかの旅（なければ新しい旅）につなぎなおす
+  function forgetTrip(){ dropLocalTrip(); renderSpots(); runSync(); }
+  $("trip-delete").onclick = async () => {
+    const t = cloud.trips.find(x => x.id === sync.tripId); if (!t) return;
+    if (!confirm(`旅「${t.title}」を削除します。場所・ルート・いいねも、メンバー全員から消えます。元に戻せません。`)) return;
+    if (!confirm("本当に削除しますか？")) return;
+    const { error } = await sb.from("trips").delete().eq("id", t.id);
+    if (error) { toast("削除できませんでした"); return; }
+    toast("旅を削除しました"); forgetTrip();
+  };
+  $("trip-leave").onclick = async () => {
+    const t = cloud.trips.find(x => x.id === sync.tripId); if (!t) return;
+    if (!confirm(`旅「${t.title}」からぬけますか？ ぬけると、この旅のリストは見られなくなります。`)) return;
+    const { error } = await sb.from("trip_members").delete().eq("trip_id", t.id).eq("user_id", me());
+    if (error) { toast("ぬけられませんでした"); return; }
+    toast("旅からぬけました"); forgetTrip();
+  };
+  async function removeMember(uid){
+    if (!confirm(`${nameOf(uid)} さんをこの旅から外しますか？`)) return;
+    const { error } = await sb.from("trip_members").delete().eq("trip_id", sync.tripId).eq("user_id", uid);
+    if (error) { toast("外せませんでした"); return; }
+    toast("外しました"); try { await pullMeta(); } catch {}
+  }
+  $("trip-members-btn").onclick = () => { $("trip-members").hidden = !$("trip-members").hidden; };
+  $("trip-invite").onclick = async () => {
+    const { data, error } = await sb.from("trip_invites").insert({ trip_id: sync.tripId }).select("code").single();
+    if (error) { toast("招待リンクを作れませんでした。電波を確認してください"); return; }
+    $("invite-url").value = location.origin + location.pathname + "?join=" + data.code;
+    $("trip-invite-box").hidden = false; $("invite-share").hidden = !navigator.share;
+  };
+  $("invite-copy").onclick = async () => toast((await copyText($("invite-url").value)) ? "コピーしました。LINEなどに貼って送ってください" : "リンクを長押ししてコピーしてください");
+  $("invite-share").onclick = () => { navigator.share({ title: "旅ナビに招待", text: "一緒に旅の行きたい場所を集めよう。", url: $("invite-url").value }).catch(() => {}); };
+
+  // ---- 招待を受ける側 ----
+  let join = { code: "", status: "", title: "" }; // status："" 未確認 / checking / ok / bad / error
+  async function renderJoin(){
+    const code = getPendingJoin(), card = $("join-card");
+    if (!code) { card.hidden = true; join = { code: "", status: "", title: "" }; return; }
+    card.hidden = false;
+    const set = (t, yes, login) => { $("join-text").textContent = t; $("join-yes").hidden = !yes; $("join-login").hidden = !login; };
+    if (!session) { set("旅への招待が届いています。Googleでログインすると、参加するか選べます。", false, true); return; }
+    if (!sb) return;
+    if (join.code !== code) join = { code, status: "", title: "" };
+    if (join.status === "" ) {
+      join.status = "checking"; set("招待を確認しています…", false, false);
+      const { data, error } = await sb.rpc("preview_invite", { p_code: code });
+      join.status = error ? "error" : data ? "ok" : "bad"; join.title = data || "";
+    }
+    if (join.status === "ok") set(`「${join.title}」に招待されています。参加すると、この旅の場所・ルートをみんなで見られます。`, true, false);
+    else if (join.status === "bad") set("この招待リンクは使えません（期限が切れたか、すでに使われています）。招待した人に、新しいリンクをもらってください。", false, false);
+    else if (join.status === "error") { set("招待を確認できませんでした。電波を確認して、もう一度開いてください。", false, false); join.status = ""; }
+  }
+  $("join-login").onclick = () => cloudLogin();
+  $("join-no").onclick = () => { setPendingJoin(""); renderJoin(); if (session) scheduleSync(0); };
+  $("join-yes").onclick = async () => {
+    const code = getPendingJoin(); if (!code || !sb) return;
+    $("join-yes").disabled = true;
+    const { data, error } = await sb.rpc("join_trip", { p_code: code });
+    $("join-yes").disabled = false;
+    if (error) { join.status = "bad"; renderJoin(); toast("参加できませんでした"); return; }
+    const title = join.title; setPendingJoin(""); renderJoin();
+    if (syncPromise) await syncPromise;
+    wantTrip = data;
+    const ok = await runSync();
+    if (ok && sync.tripId === data) toast(`「${title}」に参加しました`); else { wantTrip = null; toast("参加はできましたが、切りかえに失敗しました。旅の欄から選んでください"); }
+    renderTripCard(); renderSpots();
+  };
+
+  // ---- いいね ----
+  async function toggleLike(id){
+    if (!sharedOn()) return;
+    const uid = me(), had = likeIds(id).includes(uid);
+    cloud.likes[id] = had ? likeIds(id).filter(x => x !== uid) : [...likeIds(id), uid];
+    renderSpots();
+    const { error } = had ? await sb.from("spot_likes").delete().eq("spot_id", id).eq("user_id", uid) : await sb.from("spot_likes").insert({ spot_id: id });
+    if (error && error.code !== "23505") {
+      cloud.likes[id] = had ? [...likeIds(id), uid] : likeIds(id).filter(x => x !== uid);
+      renderSpots(); toast("いいねを保存できませんでした");
+    }
+  }
+
+  // ---- 保存したルート ----
+  function renderRoutes(){
+    const on = sharedOn(); $("routes-card").hidden = !on;
+    if (!on) return;
+    $("routes-count").textContent = cloud.routes.length ? `（${cloud.routes.length}件）` : "";
+    const box = $("route-list"); box.textContent = "";
+    if (!cloud.routes.length) { box.append(el("p", "note", "まだ保存したルートはありません。")); return; }
+    for (const r of cloud.routes) {
+      const d = el("details", "rt"), t = new Date(r.created_at);
+      d.append(el("summary", null, `${r.title || "ルート"}・${t.getMonth() + 1}/${t.getDate()} ${pad(t.getHours())}:${pad(t.getMinutes())}${cloud.members.length > 1 ? "・" + nameOf(r.created_by) : ""}`));
+      d.append(el("pre", "prompt", r.body));
+      const row = el("div", "row");
+      const cp = el("button", "btn ghost small", "コピー"); cp.type = "button"; cp.onclick = async () => toast((await copyText(r.body)) ? "コピーしました" : "長押ししてコピーしてください");
+      const dl = el("button", "link", "削除"); dl.type = "button";
+      dl.onclick = async () => {
+        if (!confirm("このルートを削除しますか？（メンバー全員から消えます）")) return;
+        const { error } = await sb.from("routes").delete().eq("id", r.id);
+        if (error) { toast("削除できませんでした"); return; }
+        cloud.routes = cloud.routes.filter(x => x.id !== r.id); renderRoutes();
+      };
+      row.append(cp, dl); d.append(row); box.append(d);
+    }
+  }
+  $("route-save").onclick = async () => {
+    const body = $("route-body").value.trim(), msg = $("route-msg");
+    if (!body) { msg.textContent = "Claudeの返事を貼り付けてください"; return; }
+    if (!sharedOn()) { msg.textContent = "ログインしていないか、共有の準備ができていません"; return; }
+    $("route-save").disabled = true; msg.textContent = "保存しています…";
+    const { error } = await sb.from("routes").insert({ trip_id: sync.tripId, title: $("route-title").value.trim().slice(0, 60), body });
+    $("route-save").disabled = false;
+    if (error) { msg.textContent = "保存できませんでした。電波を確認してください"; return; }
+    $("route-body").value = ""; $("route-title").value = ""; msg.textContent = "保存しました";
+    try { await pullMeta(); } catch {}
+  };
 
   function renderCloud(msg){
     renderGuard();
     const st = $("cloud-status");
     $("cloud-login").hidden = !!session; $("cloud-logout").hidden = !session; $("cloud-sync").hidden = !session;
     if (!session) $("cloud-orphans").hidden = true;
+    renderTripCard(); renderRoutes(); renderJoin();
     if (!session) { st.textContent = "ログインしていません。Googleでログインすると、リストがクラウドにも保存されて、ほかの端末でも見られるようになります"; return; }
     const o = sync.orphans || [];
     $("cloud-orphans").hidden = !o.length;
@@ -424,11 +720,12 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const who = session.user.email + " でログイン中。";
     if (msg) { st.textContent = who + msg; return; }
     const n = Object.keys(sync.dirty).length + (sync.tripDirty ? 1 : 0);
-    const t = sync.lastSync ? new Date(sync.lastSync) : null;
-    st.textContent = who + (n ? `まだ送っていない変更が${n}件あります` : t ? `クラウドに保存ずみ（場所 ${state.spots.length}件・${pad(t.getHours())}:${pad(t.getMinutes())}）` : "クラウドとつないでいます…");
+    const t = sync.lastSync ? new Date(sync.lastSync) : null, trip = cloud.trips.find(x => x.id === sync.tripId);
+    st.textContent = who + (n ? `まだ送っていない変更が${n}件あります` : t ? `クラウドに保存ずみ（${trip ? "「" + trip.title + "」・" : ""}場所 ${state.spots.length}件・${pad(t.getHours())}:${pad(t.getMinutes())}）` : "クラウドとつないでいます…");
   }
   async function initCloud(){
     if (!SUPA_KEY) { $("cloud-status").textContent = "キーがまだ設定されていません"; return; }
+    renderJoin();
     try { if (!window.supabase) await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"); }
     catch { $("cloud-status").textContent = "クラウドの部品を読みこめませんでした。このスマホの中には今までどおり保存されます"; return; }
     sb = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
@@ -436,7 +733,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       // ログインから戻ってきたときの ?code=… をURLから消す
       if (s && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname);
       const was = session && session.user.id; session = s;
-      if (s && was !== s.user.id) scheduleSync(0); else renderCloud();
+      if (s && was !== s.user.id) scheduleSync(0); else { renderCloud(); renderSpots(); }
     });
     // 電波が戻ったとき・アプリに戻ってきたときに同期する
     addEventListener("online", () => scheduleSync(0));
@@ -450,7 +747,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   $("cloud-login").onclick = cloudLogin;
   // ログアウトしても、このスマホの中のリストはそのまま残す
-  $("cloud-logout").onclick = async () => { await sb.auth.signOut(); sync = emptySync(null); saveSync(); renderCloud(); };
+  $("cloud-logout").onclick = async () => {
+    await sb.auth.signOut(); sync = emptySync(null); saveSync();
+    cloud.trips = []; cloud.members = []; cloud.likes = {}; cloud.routes = []; cloud.savedProfileFor = null;
+    renderCloud(); renderSpots();
+  };
   $("cloud-sync").onclick = () => scheduleSync(0);
   $("cloud-orphans-add").onclick = () => {
     sync.orphans.forEach(x => { if (!state.spots.some(y => y.id === x.id)) state.spots.push(x); sync.dirty[x.id] = "up"; });
@@ -517,7 +818,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("s-prio").onclick = e => { const b = e.target.closest("[data-p]"); if (!b) return; prio = Number(b.dataset.p);
     [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c === b ? "true" : "false")); };
   const stayText = m => !m ? "" : m >= 60 ? `${m/60}時間` : `${m}分`;
-  const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (a.created - b.created));
+  const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
   function renderSpots(){
     const box = $("spots"); box.textContent = "";
@@ -536,6 +837,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const meta = [s.kind, s.area, s.stay ? "滞在 " + stayText(s.stay) : "", s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.when].filter(Boolean).join("・");
       if (meta) body.append(el("div","meta", meta));
       if (s.memo) body.append(el("div","meta", s.memo));
+      if (session && cloud.members.length > 1 && s.by) body.append(el("div","meta","追加：" + nameOf(s.by)));
+      if (sharedOn()) {
+        const ids = likeIds(s.id), row = el("div","likes");
+        const lb = el("button","like", ids.length ? `行きたい ${ids.length}` : "行きたい"); lb.type = "button"; lb.setAttribute("aria-pressed", ids.includes(me()) ? "true" : "false"); lb.onclick = () => toggleLike(s.id);
+        row.append(lb); if (cloud.members.length > 1 && ids.length) row.append(el("span","meta", ids.map(nameOf).join("、")));
+        body.append(row);
+      }
       const ops = el("div","ops");
       const m = el("a", null, "地図"); m.href = s.map && /^https?:\/\//i.test(s.map) ? s.map : mapsQ(`${s.name} ${s.area || ""}`.trim()); m.target = "_blank"; m.rel = "noopener"; m.style.fontSize = "13px";
       const ed = el("button","link","編集"); ed.type = "button"; ed.onclick = () => startEdit(s.id);
@@ -658,7 +966,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     L.push("## 行きたい場所（上ほど優先）");
     if (!todo.length) L.push("- なし");
     todo.forEach((s, i) => {
-      const info = [s.kind, s.address || s.area, s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
+      const info = [s.kind, s.address || s.area, sharedOn() && cloud.members.length > 1 && likeIds(s.id).length ? "行きたい" + likeIds(s.id).length + "人" : "", s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
       // 地図リンクは、住所がないときだけ、短いものに限って入れる
       const map = s.map && !s.address && s.map.length <= 80 ? " " + s.map : "";
       L.push(`${i+1}. ${"★".repeat(s.prio)}${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " " + s.memo.replace(/\s+/g, " ") : ""}${map}`);
