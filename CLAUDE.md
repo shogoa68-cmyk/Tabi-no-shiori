@@ -11,7 +11,7 @@
 - 直近の旅行では使わないことになった（2026-10）。日程を気にせず、Supabase 保存などの大きめの変更もしてよい。ただし公開中のページ（main）はいつも動く状態に保つ（大きな変更はブランチで作って、確認してから main に入れる）
 
 ## しくみ
-- ファイルは `index.html` の1枚だけ（HTML・CSS・JS をすべてこの中に書く。ビルドなし・ライブラリなし）
+- ファイルは `index.html` の1枚だけ（HTML・CSS・JS をすべてこの中に書く。ビルドなし・ライブラリなし。例外：クラウド保存用の supabase-js だけは jsDelivr から版を固定して読みこむ）
 - 保存先：`localStorage`（キー `tabi-navi-v1`）。端末のブラウザの中だけに保存
   - 形：`{ spots: [...], here: {lat,lng,acc,at,address} | null, settings: {要素id: 値}, backupAt?: 最後にコピーした時刻, guardHideUntil?: 案内を隠す期限 }`
   - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created }`（`address` は後から追加。古いデータにはないので空として扱う）
@@ -20,6 +20,9 @@
   - Safariで開いているiPhoneには「ホーム画面に追加」の手順を出す（ホーム画面アプリはSafariと保存場所が別なので、コピー→復元が必要）
   - バックアップが一度もない、または7日以上前なら「データをコピー」をすすめる。「あとで」で3日間かくす
   - 起動時に `navigator.storage.persist()` を呼ぶ
+- クラウド保存（作成中。`?cloud=1` を付けて開いたときだけ動く）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン
+  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS。likes・routes はみんなで版で追加）
+  - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗したら緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）

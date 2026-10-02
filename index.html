@@ -210,6 +210,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         </div>
         <span class="msg" id="bk-msg"></span>
       </div>
+      <div class="stack" id="cloud" hidden style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
+        <span class="note" style="color:var(--ink);font-weight:700">クラウド保存（試作中）</span>
+        <p class="note" id="cloud-status">準備中…</p>
+        <div class="row">
+          <button class="btn small" type="button" id="cloud-login" hidden>Googleでログイン</button>
+          <button class="btn ghost small" type="button" id="cloud-logout" hidden>ログアウト</button>
+        </div>
+      </div>
     </div>
   </details>
 
@@ -283,6 +291,43 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("guard-copy").onclick = () => backup("guard-msg");
   $("guard-close").onclick = () => { state.guardHideUntil = Date.now() + 3 * DAY; save(); };
   renderGuard();
+
+  // ---------- クラウド保存（試作中。?cloud=1 で開いたときだけ動く） ----------
+  const SUPA_URL = "https://cnnwxwiqauyawngkpapk.supabase.co";
+  const SUPA_KEY = ""; // publishable key（公開してよいキー。RLS で守る）
+  const CLOUD_ON = new URLSearchParams(location.search).has("cloud");
+  let sb = null;
+  function loadScript(src){
+    return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); });
+  }
+  async function renderCloud(session){
+    const st = $("cloud-status");
+    $("cloud-login").hidden = !!session; $("cloud-logout").hidden = !session;
+    if (!session) { st.textContent = "ログインしていません。Googleでログインすると、リストをクラウドにも保存できるようになります（準備中）"; return; }
+    st.textContent = `${session.user.email} でログイン中。クラウドを確認しています…`;
+    const { data, error } = await sb.from("trips").select("id,title");
+    st.textContent = error ? `${session.user.email} でログイン中。ただしクラウドの表が読めません（${error.message}）` : `${session.user.email} でログイン中。クラウドにつながりました（旅 ${data.length}件）`;
+  }
+  async function initCloud(){
+    if (!CLOUD_ON) return;
+    $("cloud").hidden = false;
+    if (!SUPA_KEY) { $("cloud-status").textContent = "キーがまだ設定されていません"; return; }
+    try { if (!window.supabase) await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"); }
+    catch { $("cloud-status").textContent = "クラウドの部品を読みこめませんでした（電波を確認してください）"; return; }
+    sb = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
+    sb.auth.onAuthStateChange((_ev, session) => {
+      // ログインから戻ってきたときの ?code=… をURLから消す
+      if (session && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname + "?cloud=1");
+      setTimeout(() => renderCloud(session), 0);
+    });
+  }
+  $("cloud-login").onclick = async () => {
+    $("cloud-status").textContent = "Googleのログイン画面へ移動します…";
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + "?cloud=1" } });
+    if (error) $("cloud-status").textContent = "ログインを始められませんでした（" + error.message + "）";
+  };
+  $("cloud-logout").onclick = async () => { await sb.auth.signOut(); };
+  initCloud();
 
   // ---------- 時計 ----------
   const pad = n => String(n).padStart(2, "0");
