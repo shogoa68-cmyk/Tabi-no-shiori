@@ -213,8 +213,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <div class="stack" id="cloud" hidden style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
         <span class="note" style="color:var(--ink);font-weight:700">クラウド保存（試作中）</span>
         <p class="note" id="cloud-status">準備中…</p>
+        <div class="stack" id="cloud-orphans" hidden style="gap:6px">
+          <p class="note" style="color:var(--ink)" id="cloud-orphans-text"></p>
+          <div class="row"><button class="btn small" type="button" id="cloud-orphans-add">クラウドに追加する</button><button class="btn ghost small" type="button" id="cloud-orphans-drop">追加しない</button></div>
+        </div>
         <div class="row">
           <button class="btn small" type="button" id="cloud-login" hidden>Googleでログイン</button>
+          <button class="btn ghost small" type="button" id="cloud-sync" hidden>いま同期する</button>
           <button class="btn ghost small" type="button" id="cloud-logout" hidden>ログアウト</button>
         </div>
       </div>
@@ -263,7 +268,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch {}
 
   const SETTING_IDS = ["end-time","end-place","mode","energy","weather","people","here-memo","trip-memo"];
-  SETTING_IDS.forEach(id => { if (state.settings[id] != null) $(id).value = state.settings[id]; $(id).addEventListener("change", () => { state.settings[id] = $(id).value; save(); }); });
+  SETTING_IDS.forEach(id => { if (state.settings[id] != null) $(id).value = state.settings[id]; $(id).addEventListener("change", () => { state.settings[id] = $(id).value; save(); if (id === "trip-memo") cloudMarkTrip(); }); });
   if (state.settings["allow-new"] != null) $("allow-new").checked = state.settings["allow-new"];
   $("allow-new").onchange = () => { state.settings["allow-new"] = $("allow-new").checked; save(); };
 
@@ -301,37 +306,161 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   if (new URLSearchParams(location.search).has("cloud")) { try { localStorage.setItem(CLOUD_KEY, "1"); } catch {} }
   let CLOUD_ON = false; try { CLOUD_ON = localStorage.getItem(CLOUD_KEY) === "1"; } catch {}
   $("cloud-try").hidden = CLOUD_ON;
-  let sb = null;
+  let sb = null, session = null;
   function loadScript(src){
     return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); });
   }
-  async function renderCloud(session){
+  // 同期の帳面（このブラウザだけ）：どの旅につないでいるか・まだ送っていない変更
+  //   { userId, tripId, dirty: { 場所id: "up" | "del" }, tripDirty, replaceAll, lastSync, orphans: [クラウドにない手元の場所] }
+  const SYNC_KEY = "tabi-navi-sync";
+  const emptySync = uid => ({ userId: uid, tripId: null, dirty: {}, tripDirty: false, replaceAll: false, lastSync: 0, orphans: [] });
+  let sync = emptySync(null);
+  try { Object.assign(sync, JSON.parse(localStorage.getItem(SYNC_KEY) || "{}")); } catch {}
+  if (!sync.dirty || typeof sync.dirty !== "object") sync.dirty = {};
+  if (!Array.isArray(sync.orphans)) sync.orphans = [];
+  const saveSync = () => { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch {} };
+  const isUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v || "");
+  function newId(){
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
+    const h = [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+  }
+  // 古い形のid（例：lx3k2abc）から、いつも同じ uuid を作る（Safari とホーム画面アプリで同じ場所が2つにならないように）
+  async function idFromOld(old){
+    const h = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("tabi-navi:" + old)))].slice(0, 16);
+    h[6] = h[6] & 15 | 80; h[8] = h[8] & 63 | 128;
+    const x = h.map(v => v.toString(16).padStart(2, "0")).join("");
+    return `${x.slice(0,8)}-${x.slice(8,12)}-${x.slice(12,16)}-${x.slice(16,20)}-${x.slice(20)}`;
+  }
+  // 画面の「場所」⇔ クラウドの行（spots の表）
+  const toRow = s => ({ id: s.id, trip_id: sync.tripId, name: s.name, prio: s.prio, area: s.area || "", address: s.address || "", stay: s.stay || null,
+    hours: s.hours || "", closed: s.closed || "", kind: s.kind || "観光", when_text: s.when || "", map: s.map || "", memo: s.memo || "", done: !!s.done,
+    created_at: new Date(s.created || Date.now()).toISOString() });
+  const fromRow = r => ({ id: r.id, name: r.name, prio: r.prio, area: r.area, address: r.address, stay: r.stay, hours: r.hours, closed: r.closed,
+    kind: r.kind, when: r.when_text, map: r.map, memo: r.memo, done: r.done, created: Date.parse(r.created_at) });
+
+  // 変更の印をつける（ログインしていなくてもつけておき、ログインしたら送る）
+  function cloudMark(id, op){ if (!CLOUD_ON) return; sync.dirty[id] = op; saveSync(); scheduleSync(); }
+  function cloudMarkTrip(){ if (!CLOUD_ON) return; sync.tripDirty = true; saveSync(); scheduleSync(); }
+  let syncTimer = null, syncing = false, syncAgain = false;
+  function scheduleSync(delay = 800){ clearTimeout(syncTimer); syncTimer = setTimeout(runSync, delay); }
+
+  async function runSync(){
+    if (!sb || !session) { renderCloud(); return; }
+    if (syncing) { syncAgain = true; return; }
+    syncing = true; renderCloud("同期しています…");
+    try { await syncOnce(); sync.lastSync = Date.now(); saveSync(); renderCloud(); }
+    catch (e) { renderCloud("同期できませんでした。電波が戻ったら、もう一度送ります（" + (e.message || e) + "）"); }
+    syncing = false;
+    if (syncAgain) { syncAgain = false; scheduleSync(0); }
+  }
+  async function syncOnce(){
+    const uid = session.user.id;
+    if (sync.userId !== uid) sync = emptySync(uid); // はじめての人・別の人
+    // 古い形のidを uuid に変える（1回だけ）
+    let changed = false;
+    for (const sp of state.spots) if (!isUuid(sp.id)) { sp.id = await idFromOld(sp.id); changed = true; }
+    if (changed) save();
+    for (const k of Object.keys(sync.dirty)) if (!isUuid(k)) { const op = sync.dirty[k]; delete sync.dirty[k]; sync.dirty[await idFromOld(k)] = op; }
+    if (!sync.tripId) {
+      const { data: trips, error } = await sb.from("trips").select("id,memo").order("created_at");
+      if (error) throw error;
+      if (trips.length) {
+        // もうクラウドに旅がある：クラウドを正とする。手元にしかない場所は、勝手に送らずにあとで聞く
+        //（ほかの端末で消した場所が、よみがえらないように）
+        const { data: rows, error: e2 } = await sb.from("spots").select("id").eq("trip_id", trips[0].id);
+        if (e2) throw e2;
+        const there = new Set(rows.map(r => r.id));
+        sync.orphans = state.spots.filter(sp => !there.has(sp.id));
+        sync.dirty = {};
+        if (!trips[0].memo && state.settings["trip-memo"]) sync.tripDirty = true; // クラウドのメモが空なら、手元のメモを送る
+        sync.tripId = trips[0].id;
+      } else {
+        const { data: t, error: e2 } = await sb.from("trips").insert({ title: "私の旅", memo: state.settings["trip-memo"] || "" }).select("id").single();
+        if (e2) throw e2;
+        sync.tripId = t.id;
+        state.spots.forEach(sp => { sync.dirty[sp.id] = "up"; }); // 新しい旅：手元の場所を全部送る
+      }
+      saveSync();
+    }
+    // 1) 送る
+    if (sync.tripDirty) {
+      const { error } = await sb.from("trips").update({ memo: state.settings["trip-memo"] || "" }).eq("id", sync.tripId);
+      if (error) throw error;
+      sync.tripDirty = false; saveSync();
+    }
+    const ups = Object.keys(sync.dirty).filter(id => sync.dirty[id] === "up").map(id => state.spots.find(x => x.id === id)).filter(Boolean);
+    const dels = Object.keys(sync.dirty).filter(id => sync.dirty[id] === "del");
+    if (ups.length) { const { error } = await sb.from("spots").upsert(ups.map(toRow)); if (error) throw error; }
+    if (dels.length) { const { error } = await sb.from("spots").delete().in("id", dels); if (error) throw error; }
+    if (sync.replaceAll) { // 「貼り付けて復元」したとき：手元にない場所はクラウドからも消す
+      const { data, error } = await sb.from("spots").select("id").eq("trip_id", sync.tripId);
+      if (error) throw error;
+      const keep = new Set(state.spots.map(x => x.id)), gone = data.map(r => r.id).filter(id => !keep.has(id));
+      if (gone.length) { const { error: e3 } = await sb.from("spots").delete().in("id", gone); if (e3) throw e3; }
+      sync.replaceAll = false;
+    }
+    [...ups.map(x => x.id), ...dels].forEach(id => delete sync.dirty[id]);
+    saveSync();
+    // 2) 受け取る（送っている間に変わった場所は、手元を優先）
+    const [{ data: rows, error: e4 }, { data: trip, error: e5 }] = await Promise.all([
+      sb.from("spots").select("*").eq("trip_id", sync.tripId),
+      sb.from("trips").select("memo").eq("id", sync.tripId).single()
+    ]);
+    if (e4) throw e4; if (e5) throw e5;
+    const local = new Map(state.spots.map(x => [x.id, x]));
+    const next = rows.map(r => sync.dirty[r.id] === "up" && local.has(r.id) ? local.get(r.id) : fromRow(r)).filter(x => sync.dirty[x.id] !== "del");
+    state.spots.forEach(x => { if (sync.dirty[x.id] === "up" && !next.some(n => n.id === x.id)) next.push(x); });
+    state.spots = next;
+    if (!sync.tripDirty && trip) { state.settings["trip-memo"] = trip.memo; if (document.activeElement !== $("trip-memo")) $("trip-memo").value = trip.memo; }
+    save(); renderSpots();
+  }
+
+  function renderCloud(msg){
     const st = $("cloud-status");
-    $("cloud-login").hidden = !!session; $("cloud-logout").hidden = !session;
-    if (!session) { st.textContent = "ログインしていません。Googleでログインすると、リストをクラウドにも保存できるようになります（準備中）"; return; }
-    st.textContent = `${session.user.email} でログイン中。クラウドを確認しています…`;
-    const { data, error } = await sb.from("trips").select("id,title");
-    st.textContent = error ? `${session.user.email} でログイン中。ただしクラウドの表が読めません（${error.message}）` : `${session.user.email} でログイン中。クラウドにつながりました（旅 ${data.length}件）`;
+    $("cloud-login").hidden = !!session; $("cloud-logout").hidden = !session; $("cloud-sync").hidden = !session;
+    if (!session) $("cloud-orphans").hidden = true;
+    if (!session) { st.textContent = "ログインしていません。Googleでログインすると、リストがクラウドにも保存されて、ほかの端末でも見られるようになります"; return; }
+    const o = sync.orphans || [];
+    $("cloud-orphans").hidden = !o.length;
+    $("cloud-orphans-text").textContent = o.length ? `この端末にだけある場所が${o.length}件あります（${o.map(x => x.name).join("、")}）。ほかの端末で消した場所かもしれません。クラウドに追加しますか？` : "";
+    const who = session.user.email + " でログイン中。";
+    if (msg) { st.textContent = who + msg; return; }
+    const n = Object.keys(sync.dirty).length + (sync.tripDirty ? 1 : 0);
+    const t = sync.lastSync ? new Date(sync.lastSync) : null;
+    st.textContent = who + (n ? `まだ送っていない変更が${n}件あります` : t ? `クラウドに保存ずみ（場所 ${state.spots.length}件・${pad(t.getHours())}:${pad(t.getMinutes())}）` : "クラウドとつないでいます…");
   }
   async function initCloud(){
     if (!CLOUD_ON) return;
     $("cloud").hidden = false;
     if (!SUPA_KEY) { $("cloud-status").textContent = "キーがまだ設定されていません"; return; }
     try { if (!window.supabase) await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"); }
-    catch { $("cloud-status").textContent = "クラウドの部品を読みこめませんでした（電波を確認してください）"; return; }
+    catch { $("cloud-status").textContent = "クラウドの部品を読みこめませんでした。このスマホの中には今までどおり保存されます"; return; }
     sb = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
-    sb.auth.onAuthStateChange((_ev, session) => {
+    sb.auth.onAuthStateChange((_ev, s) => {
       // ログインから戻ってきたときの ?code=… をURLから消す
-      if (session && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname + "?cloud=1");
-      setTimeout(() => renderCloud(session), 0);
+      if (s && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname + "?cloud=1");
+      const was = session && session.user.id; session = s;
+      if (s && was !== s.user.id) scheduleSync(0); else renderCloud();
     });
+    // 電波が戻ったとき・アプリに戻ってきたときに同期する
+    addEventListener("online", () => scheduleSync(0));
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") scheduleSync(300); });
   }
   $("cloud-login").onclick = async () => {
     $("cloud-status").textContent = "Googleのログイン画面へ移動します…";
     const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + "?cloud=1" } });
     if (error) $("cloud-status").textContent = "ログインを始められませんでした（" + error.message + "）";
   };
-  $("cloud-logout").onclick = async () => { await sb.auth.signOut(); };
+  // ログアウトしても、このスマホの中のリストはそのまま残す
+  $("cloud-logout").onclick = async () => { await sb.auth.signOut(); sync = emptySync(null); saveSync(); renderCloud(); };
+  $("cloud-sync").onclick = () => scheduleSync(0);
+  $("cloud-orphans-add").onclick = () => {
+    sync.orphans.forEach(x => { if (!state.spots.some(y => y.id === x.id)) state.spots.push(x); sync.dirty[x.id] = "up"; });
+    sync.orphans = []; saveSync(); save(); renderSpots(); scheduleSync(0);
+  };
+  $("cloud-orphans-drop").onclick = () => { sync.orphans = []; saveSync(); renderCloud(); };
   initCloud();
 
   // ---------- 時計 ----------
@@ -399,7 +528,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     for (const s of list) {
       const c = el("article","card spot" + (s.done ? " done" : ""));
       const chk = el("input","chk"); chk.type = "checkbox"; chk.checked = !!s.done; chk.setAttribute("aria-label", `${s.name} に行った`);
-      chk.onchange = () => { s.done = chk.checked; save(); renderSpots(); toast(s.done ? `「${s.name}」を行った所にしました` : "未訪問に戻しました"); };
+      chk.onchange = () => { s.done = chk.checked; save(); cloudMark(s.id, "up"); renderSpots(); toast(s.done ? `「${s.name}」を行った所にしました` : "未訪問に戻しました"); };
       const body = el("div","body");
       body.append(el("div","stars", "★".repeat(s.prio) + "☆".repeat(3 - s.prio)), el("div","nm", s.name));
       const meta = [s.kind, s.area, s.stay ? "滞在 " + stayText(s.stay) : "", s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.when].filter(Boolean).join("・");
@@ -409,7 +538,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const m = el("a", null, "地図"); m.href = s.map && /^https?:\/\//i.test(s.map) ? s.map : mapsQ(`${s.name} ${s.area || ""}`.trim()); m.target = "_blank"; m.rel = "noopener"; m.style.fontSize = "13px";
       const ed = el("button","link","編集"); ed.type = "button"; ed.onclick = () => startEdit(s.id);
       const del = el("button","link","削除"); del.type = "button";
-      del.onclick = () => { if (del.dataset.sure) { state.spots = state.spots.filter(x => x.id !== s.id); save(); renderSpots(); } else { del.dataset.sure = "1"; del.textContent = "本当に？"; del.style.color = "var(--star)"; } };
+      del.onclick = () => { if (del.dataset.sure) { state.spots = state.spots.filter(x => x.id !== s.id); save(); cloudMark(s.id, "del"); renderSpots(); } else { del.dataset.sure = "1"; del.textContent = "本当に？"; del.style.color = "var(--star)"; } };
       ops.append(m, ed, del);
       c.append(chk, body, ops); box.append(c);
     }
@@ -435,8 +564,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const v = {}; Object.entries(FIELDS).forEach(([k, fid]) => v[k] = $(fid).value.trim());
     if (!v.name) { $("s-msg").textContent = "名前を入れてください"; return; }
     v.stay = v.stay ? Number(v.stay) : null; v.prio = prio;
-    if (editing) { Object.assign(state.spots.find(x => x.id === editing), v); toast("保存しました"); }
-    else { state.spots.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), done: false, created: Date.now() }, v)); toast(`「${v.name}」を追加しました`); }
+    if (editing) { Object.assign(state.spots.find(x => x.id === editing), v); cloudMark(editing, "up"); toast("保存しました"); }
+    else { const id = newId(); state.spots.push(Object.assign({ id, done: false, created: Date.now() }, v)); cloudMark(id, "up"); toast(`「${v.name}」を追加しました`); }
     save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots();
   };
 
@@ -573,7 +702,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("import-open").onclick = () => $("import-box").hidden = !$("import-box").hidden;
   $("import-do").onclick = () => {
     try { const s = JSON.parse($("import-text").value); if (!s || !Array.isArray(s.spots)) throw 0;
-      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, backupAt: Date.now() }; save(); location.reload();
+      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, backupAt: Date.now() }; save();
+      if (CLOUD_ON) { s.spots.forEach(x => sync.dirty[x.id] = "up"); sync.replaceAll = true; sync.tripDirty = true; saveSync(); }
+      location.reload();
     } catch { $("bk-msg").textContent = "データの形がちがうようです。コピーした文をそのまま貼ってください"; }
   };
 })();

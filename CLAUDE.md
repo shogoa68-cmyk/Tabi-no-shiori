@@ -23,6 +23,10 @@
 - クラウド保存（作成中。`?cloud=1` で一度開くか、設定の「クラウド保存（試作中）を試す」を押すと、以後 localStorage `tabi-navi-cloud` の印で表示される）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン
   - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS。likes・routes はみんなで版で追加）
   - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
+  - 同期：localStorage が手元のコピー。変更は `cloudMark(id, "up"|"del")`／`cloudMarkTrip()` で印をつけ、`runSync()` が送る→受け取る（クラウドが正。未送信の変更だけ手元を優先）
+  - 同期の帳面は localStorage `tabi-navi-sync`（userId・tripId・dirty・orphans など）。新しい場所の id は uuid。古い id はハッシュで決まった uuid に変える（端末がちがっても同じ id になる）
+  - はじめてつないだ端末にクラウドにない場所があれば、自動で送らずに「追加しますか？」と聞く（ほかの端末で消した場所がよみがえらないように）
+  - 旅のメモ（trip-memo）は trips.memo に保存。いまは1人1つの旅だけ使う
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗したら緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）
