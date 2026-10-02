@@ -348,7 +348,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 長いURLから { name, address, area } を取り出す。わからない所は空のまま
   function parseMapUrl(u){
     let url; try { url = new URL(u); } catch { return null; }
-    if (!/(^|\.)google\.[a-z.]+$/i.test(url.hostname) || !url.pathname.startsWith("/maps")) return null;
+    // www.google.com/maps… と maps.google.com/… の両方を読む
+    const isMaps = /^maps\.google\.[a-z.]+$/i.test(url.hostname) || (/(^|\.)google\.[a-z.]+$/i.test(url.hostname) && url.pathname.startsWith("/maps"));
+    if (!isMaps) return null;
     const out = { name: "", address: "", area: "" };
     const m = url.pathname.match(/\/maps\/place\/([^/]+)/);
     let q = m ? m[1] : (url.searchParams.get("q") || url.searchParams.get("query") || "");
