@@ -13,9 +13,13 @@
 ## しくみ
 - ファイルは `index.html` の1枚だけ（HTML・CSS・JS をすべてこの中に書く。ビルドなし・ライブラリなし）
 - 保存先：`localStorage`（キー `tabi-navi-v1`）。端末のブラウザの中だけに保存
-  - 形：`{ spots: [...], here: {lat,lng,acc,at,address} | null, settings: {要素id: 値} }`
+  - 形：`{ spots: [...], here: {lat,lng,acc,at,address} | null, settings: {要素id: 値}, backupAt?: 最後にコピーした時刻, guardHideUntil?: 案内を隠す期限 }`
   - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created }`（`address` は後から追加。古いデータにはないので空として扱う）
   - **データの形を変えるときは、古いデータも読めるようにすること**（オーナーのリストが消えないように）
+- データを守る案内（`#guard`）：iPhoneのSafariは7日間ひらかないサイトのデータを消すことがあるため、
+  - Safariで開いているiPhoneには「ホーム画面に追加」の手順を出す（ホーム画面アプリはSafariと保存場所が別なので、コピー→復元が必要）
+  - バックアップが一度もない、または7日以上前なら「データをコピー」をすすめる。「あとで」で3日間かくす
+  - 起動時に `navigator.storage.persist()` を呼ぶ
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗したら緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）

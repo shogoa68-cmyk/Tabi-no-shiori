@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2F6F62">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="旅ナビ">
 <title>いまから旅ナビ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -85,6 +88,10 @@ details.card[open] > summary{margin-bottom:10px}
 .quick button{flex:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 12px;cursor:pointer}
 .go{font-family:var(--display);font-size:17px;width:100%;padding:13px}
 .toast{position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:99px;font-size:13px;z-index:6;max-width:90vw}
+/* データを守る案内 */
+.guard{border-color:var(--star);background:var(--warn-soft)}
+.guard ol{margin:0;padding-left:1.4em}
+.guard li+li{margin-top:2px}
 pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:260px;overflow:auto;margin:0;user-select:all}
 </style>
 </head>
@@ -94,6 +101,22 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <div class="eyebrow">いまから旅ナビ</div>
     <h1 style="font-size:24px">ここから、どこへ行こう？</h1>
   </header>
+
+  <!-- データを守る案内（ホーム画面に追加・バックアップ） -->
+  <section class="card stack guard" id="guard" hidden aria-labelledby="h-guard">
+    <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><h2 id="h-guard" style="font-size:16px">リストが消えないように</h2><button class="link" type="button" id="guard-close">あとで</button></div>
+    <div class="stack" id="guard-home" hidden style="gap:6px">
+      <p class="note" style="color:var(--ink)">iPhoneのSafariは、7日間ひらかなかったサイトのデータを自動で消すことがあります。ホーム画面に追加して、そこから開くと消えにくくなります。</p>
+      <ol class="note" style="color:var(--ink)">
+        <li>下の「データをコピー」を押す（今のリストを写しておく）</li>
+        <li>Safariの「共有」ボタン（見つからなければ「…」の中）→「ホーム画面に追加」</li>
+        <li>ホーム画面の「旅ナビ」から開き、「旅の設定・バックアップ」→「データを貼り付けて復元」</li>
+      </ol>
+      <p class="note">ホーム画面から開いたアプリは、Safariとは別の場所にデータを保存します。なので、3の貼り付けが必要です。</p>
+    </div>
+    <p class="note" id="guard-backup" hidden style="color:var(--ink)"></p>
+    <div class="row"><button class="btn small" type="button" id="guard-copy">データをコピー</button><span class="msg" id="guard-msg"></span></div>
+  </section>
 
   <!-- いま -->
   <section class="card now" aria-label="いまの状況">
@@ -180,6 +203,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           <button class="btn ghost small" type="button" id="export">データをコピー</button>
           <button class="btn ghost small" type="button" id="import-open">データを貼り付けて復元</button>
         </div>
+        <span class="note" id="bk-last"></span>
         <div class="stack" id="import-box" hidden>
           <textarea id="import-text" placeholder="コピーしたデータを貼り付け"></textarea>
           <div class="row"><button class="btn small" type="button" id="import-do">復元する（今のリストは置きかわります）</button></div>
@@ -224,7 +248,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // ---------- 保存（このブラウザの中だけ） ----------
   let state = { spots: [], here: null, settings: {} };
   try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && Array.isArray(s.spots)) state = Object.assign(state, s); } catch {}
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
+  if (!state.settings || typeof state.settings !== "object") state.settings = {}; // 古い・こわれたデータでも止まらないように
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} renderGuard(); };
+  // 「このデータは消さないで」とブラウザにお願いする（できる端末だけ）
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch {}
 
   const SETTING_IDS = ["end-time","end-place","mode","energy","weather","people","here-memo","trip-memo"];
   SETTING_IDS.forEach(id => { if (state.settings[id] != null) $(id).value = state.settings[id]; $(id).addEventListener("change", () => { state.settings[id] = $(id).value; save(); }); });
@@ -233,6 +260,29 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 
   let toastT;
   const toast = t => { $("toast").textContent = t; $("toast").hidden = false; clearTimeout(toastT); toastT = setTimeout(() => $("toast").hidden = true, 2600); };
+
+  // ---------- データを守る案内 ----------
+  const DAY = 86400000;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  function renderGuard(){
+    const now = Date.now(), b = state.backupAt;
+    const needHome = isIOS && !standalone;
+    const needBackup = state.spots.length > 0 && (!b || now - b > 7 * DAY);
+    $("guard").hidden = !(needHome || needBackup) || (state.guardHideUntil || 0) > now;
+    $("guard-home").hidden = !needHome;
+    $("guard-backup").hidden = !needBackup || needHome;
+    $("guard-backup").textContent = b ? `最後のバックアップから${Math.floor((now - b) / DAY)}日たっています。念のため、もう一度コピーしてメモアプリなどに貼っておきましょう。` : "まだ一度もバックアップしていません。データをコピーして、メモアプリなどに貼っておくと安心です。";
+    $("bk-last").textContent = b ? `最後にコピーした日：${new Date(b).getMonth() + 1}月${new Date(b).getDate()}日` : "まだ一度もコピーしていません";
+  }
+  async function backup(msgId){
+    const ok = await copyText(JSON.stringify(state));
+    if (ok) { state.backupAt = Date.now(); save(); }
+    $(msgId).textContent = ok ? "コピーしました。メモアプリなどに貼って保存してください" : "コピーできませんでした";
+  }
+  $("guard-copy").onclick = () => backup("guard-msg");
+  $("guard-close").onclick = () => { state.guardHideUntil = Date.now() + 3 * DAY; save(); };
+  renderGuard();
 
   // ---------- 時計 ----------
   const pad = n => String(n).padStart(2, "0");
@@ -469,11 +519,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("pv-close").onclick = () => $("preview").hidden = true;
 
   // ---------- バックアップ ----------
-  $("export").onclick = async () => { $("bk-msg").textContent = (await copyText(JSON.stringify(state))) ? "コピーしました。メモアプリなどに貼って保存してください" : "コピーできませんでした"; };
+  $("export").onclick = () => backup("bk-msg");
   $("import-open").onclick = () => $("import-box").hidden = !$("import-box").hidden;
   $("import-do").onclick = () => {
     try { const s = JSON.parse($("import-text").value); if (!s || !Array.isArray(s.spots)) throw 0;
-      state = { spots: s.spots, here: s.here || null, settings: s.settings || {} }; save(); location.reload();
+      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, backupAt: Date.now() }; save(); location.reload();
     } catch { $("bk-msg").textContent = "データの形がちがうようです。コピーした文をそのまま貼ってください"; }
   };
 })();
