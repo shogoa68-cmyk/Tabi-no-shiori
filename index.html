@@ -134,6 +134,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <details class="card" id="add-box">
       <summary id="add-title">場所を追加</summary>
       <form id="spot-form" class="stack">
+        <div class="stack" style="gap:6px">
+          <label>GoogleマップのURL<input id="s-map" type="url" maxlength="2000" placeholder="共有でコピーしたリンクを貼る"></label>
+          <div class="row"><button class="btn ghost small" type="button" id="s-load">名前と住所を読みこむ</button><span class="note" id="s-load-msg"></span></div>
+        </div>
         <label>名前 *<input id="s-name" required maxlength="60" placeholder="例：伏見稲荷大社"></label>
         <div class="stack" style="gap:4px">
           <span class="note">行きたい度</span>
@@ -153,7 +157,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
             <select id="s-kind"><option>観光</option><option>ごはん</option><option>カフェ</option><option>買い物</option><option>体験</option></select></label>
           <label>行きたい時間帯<input id="s-when" maxlength="30" placeholder="例：夕方、ランチに"></label>
         </div>
-        <label>GoogleマップのURL<input id="s-map" type="url" maxlength="400" placeholder="共有でコピーしたURL"></label>
+        <label>住所<input id="s-address" maxlength="120" placeholder="例：京都府京都市伏見区深草藪之内町68"></label>
         <label>メモ<textarea id="s-memo" maxlength="300" placeholder="例：予約 12:00。千本鳥居の上まで行きたい"></textarea></label>
         <div class="row">
           <button class="btn" type="submit" id="s-save">追加する</button>
@@ -312,11 +316,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   $("show-done").onchange = renderSpots;
 
-  const FIELDS = { name: "s-name", area: "s-area", stay: "s-stay", hours: "s-hours", closed: "s-closed", kind: "s-kind", when: "s-when", map: "s-map", memo: "s-memo" };
+  const FIELDS = { name: "s-name", area: "s-area", address: "s-address", stay: "s-stay", hours: "s-hours", closed: "s-closed", kind: "s-kind", when: "s-when", map: "s-map", memo: "s-memo" };
   function resetForm(){
     editing = null; $("spot-form").reset(); $("s-kind").value = "観光";
     prio = 2; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c.dataset.p === "2" ? "true" : "false"));
-    $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("add-title").textContent = "場所を追加";
+    $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を追加";
   }
   function startEdit(id){
     const s = state.spots.find(x => x.id === id); if (!s) return;
@@ -333,8 +337,62 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     v.stay = v.stay ? Number(v.stay) : null; v.prio = prio;
     if (editing) { Object.assign(state.spots.find(x => x.id === editing), v); toast("保存しました"); }
     else { state.spots.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), done: false, created: Date.now() }, v)); toast(`「${v.name}」を追加しました`); }
-    save(); resetForm(); $("s-msg").textContent = ""; renderSpots();
+    save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots();
   };
+
+  // ---------- Googleマップのリンクから名前・住所を読みこむ ----------
+  // 短縮リンク（maps.app.goo.gl）を長いURLに戻す係（Supabase Edge Function）。空のあいだは長いURLだけ読める
+  const RESOLVER = "";
+  const toHalf = t => t.replace(/[０-９Ａ-Ｚａ-ｚ－]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, " ");
+  const isShort = u => /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(u);
+  // 長いURLから { name, address, area } を取り出す。わからない所は空のまま
+  function parseMapUrl(u){
+    let url; try { url = new URL(u); } catch { return null; }
+    if (!/(^|\.)google\.[a-z.]+$/i.test(url.hostname) || !url.pathname.startsWith("/maps")) return null;
+    const out = { name: "", address: "", area: "" };
+    const m = url.pathname.match(/\/maps\/place\/([^/]+)/);
+    let q = m ? m[1] : (url.searchParams.get("q") || url.searchParams.get("query") || "");
+    try { q = decodeURIComponent(q.replace(/\+/g, " ")); } catch {}
+    q = toHalf(q).trim();
+    if (!q || /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(q)) return out; // 緯度経度だけのときは名前なし
+    // 「〒273-0121 千葉県鎌ケ谷市初富156 濵農カフェ」の形：郵便番号・住所・名前の順
+    q = q.replace(/^〒?\s*\d{3}-?\d{4}\s*/, "");
+    const parts = q.split(/\s+/);
+    if (parts.length > 1 && /^(北海道|東京都|京都府|大阪府|.{2,3}県)/.test(parts[0])) { out.address = parts[0]; out.name = parts.slice(1).join(" "); }
+    else if (m && /^(北海道|東京都|京都府|大阪府|.{2,3}県)/.test(q)) out.address = q;
+    else out.name = q;
+    if (out.address) { const a = out.address.replace(/^(北海道|東京都|京都府|大阪府|.{2,3}県)/, "").match(/^(.+?郡)?(.+?[市区町村])/); if (a) out.area = a[2]; }
+    return out;
+  }
+  async function resolveShort(u){
+    if (!RESOLVER) return "";
+    try {
+      const r = await fetch(RESOLVER + "?url=" + encodeURIComponent(u), { signal: AbortSignal.timeout(8000) });
+      const j = await r.json(); return j.url || "";
+    } catch { return ""; }
+  }
+  async function loadFromMap(){
+    const raw = $("s-map").value, msg = $("s-load-msg");
+    const u = (raw.match(/https?:\/\/\S+/) || [""])[0];
+    if (!u) { msg.textContent = "GoogleマップのURLを貼ってください"; return; }
+    $("s-map").value = u; $("s-load").disabled = true; msg.textContent = "読みこみ中…";
+    let long = u;
+    if (isShort(u)) {
+      long = await resolveShort(u);
+      if (!long) { $("s-load").disabled = false; msg.textContent = RESOLVER ? "読みこめませんでした。名前は手で入れてください" : "短いリンクはまだ読めません。名前は手で入れてください"; return; }
+    }
+    const p = parseMapUrl(long);
+    $("s-load").disabled = false;
+    // 長いURLは、場所を表す部分（q・ftid など）だけ残して短くする（お願い文が長くなりすぎないように）
+    if (p && !isShort(u)) { const c = new URL(u); [...c.searchParams.keys()].forEach(k => { if (!["q","query","api","ftid","cid"].includes(k)) c.searchParams.delete(k); }); $("s-map").value = c.toString(); }
+    if (!p || !(p.name || p.address)) { msg.textContent = "名前が見つかりませんでした。手で入れてください"; return; }
+    // すでに書いてある欄は上書きしない
+    const got = [];
+    [["name","s-name","名前"],["address","s-address","住所"],["area","s-area","エリア"]].forEach(([k, id, label]) => { if (p[k] && !$(id).value.trim()) { $(id).value = p[k]; got.push(label); } });
+    msg.textContent = got.length ? got.join("・") + "を入れました。ちがっていたら直してください" : "入れる欄がありませんでした（すでに入っています）";
+  }
+  $("s-load").onclick = loadFromMap;
+  $("s-map").addEventListener("paste", () => setTimeout(() => { if (!$("s-name").value.trim()) loadFromMap(); }, 0));
   renderSpots();
 
   // ---------- Claude へのお願い文を作る ----------
@@ -367,7 +425,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     lines.push("## 行きたい場所（上ほど行きたい）");
     if (!todo.length) lines.push("- （リストは空です）");
     todo.forEach((s, i) => {
-      const info = [s.kind, s.area, s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望:" + s.when : ""].filter(Boolean).join("／");
+      const info = [s.kind, s.area, s.address ? "住所" + s.address : "", s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望:" + s.when : ""].filter(Boolean).join("／");
       lines.push(`${i+1}. ${"★".repeat(s.prio)} ${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " メモ：" + s.memo.replace(/\s+/g, " ") : ""}${s.map ? " 地図：" + s.map : ""}`);
     });
     if (done.length) lines.push(`- もう行った所：${done.map(s => s.name).join("、")}`);
