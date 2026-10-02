@@ -20,7 +20,7 @@
   - Safariで開いているiPhoneには「ホーム画面に追加」の手順を出す（ホーム画面アプリはSafariと保存場所が別なので、コピー→復元が必要）
   - バックアップが一度もない、または7日以上前なら「データをコピー」をすすめる。「あとで」で3日間かくす
   - 起動時に `navigator.storage.persist()` を呼ぶ
-- クラウド保存（作成中。`?cloud=1` を付けて開いたときだけ動く）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン
+- クラウド保存（作成中。`?cloud=1` で一度開くか、設定の「クラウド保存（試作中）を試す」を押すと、以後 localStorage `tabi-navi-cloud` の印で表示される）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン
   - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS。likes・routes はみんなで版で追加）
   - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗したら緯度経度のまま続ける）

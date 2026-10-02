@@ -218,6 +218,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           <button class="btn ghost small" type="button" id="cloud-logout" hidden>ログアウト</button>
         </div>
       </div>
+      <a class="note" id="cloud-try" href="?cloud=1" hidden>クラウド保存（試作中）を試す</a>
     </div>
   </details>
 
@@ -294,8 +295,12 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 
   // ---------- クラウド保存（試作中。?cloud=1 で開いたときだけ動く） ----------
   const SUPA_URL = "https://cnnwxwiqauyawngkpapk.supabase.co";
-  const SUPA_KEY = ""; // publishable key（公開してよいキー。RLS で守る）
-  const CLOUD_ON = new URLSearchParams(location.search).has("cloud");
+  const SUPA_KEY = "sb_publishable_A3y_3DhT3JNGVbOE3KEDxw_JQcz4JkS"; // publishable key（公開してよいキー。RLS で守る）
+  // 一度 ?cloud=1 で開いたら、次からも出す（ホーム画面アプリはURLを変えられないため）
+  const CLOUD_KEY = "tabi-navi-cloud";
+  if (new URLSearchParams(location.search).has("cloud")) { try { localStorage.setItem(CLOUD_KEY, "1"); } catch {} }
+  let CLOUD_ON = false; try { CLOUD_ON = localStorage.getItem(CLOUD_KEY) === "1"; } catch {}
+  $("cloud-try").hidden = CLOUD_ON;
   let sb = null;
   function loadScript(src){
     return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); });
