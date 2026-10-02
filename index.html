@@ -342,7 +342,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 
   // ---------- Googleマップのリンクから名前・住所を読みこむ ----------
   // 短縮リンク（maps.app.goo.gl）を長いURLに戻す係（Supabase Edge Function）。空のあいだは長いURLだけ読める
-  const RESOLVER = "";
+  const RESOLVER = "https://cnnwxwiqauyawngkpapk.supabase.co/functions/v1/resolve-map";
   const toHalf = t => t.replace(/[０-９Ａ-Ｚａ-ｚ－]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, " ");
   const isShort = u => /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(u);
   // 長いURLから { name, address, area } を取り出す。わからない所は空のまま

@@ -22,7 +22,7 @@
   - `https://claude.ai/new?q=...` を開く（入力欄に自動で入らない環境では貼り付けてもらう）
 - Googleマップのリンク読みこみ：「場所を追加」の URL 欄に貼ると、名前・住所・エリアを自動で入れる（空の欄だけ）
   - 長いURL（`google.com/maps?q=〒… 住所 名前` や `/maps/place/名前/`）はページの中だけで読み取る
-  - 短縮リンク（`maps.app.goo.gl`）は Supabase Edge Function `resolve-map`（`supabase/functions/resolve-map/index.ts`）で長いURLに戻す。呼び先は `index.html` の `RESOLVER`（空なら短縮リンクは読まない）
+  - 短縮リンク（`maps.app.goo.gl`）は Supabase Edge Function `resolve-map`（`supabase/functions/resolve-map/index.ts`）で長いURLに戻す。呼び先は `index.html` の `RESOLVER`（プロジェクト `cnnwxwiqauyawngkpapk`。空なら短縮リンクは読まない）
   - 営業時間・Webサイトは取らない（当日 Claude に調べてもらう）
 - クイックボタン（次どこ行く？／近くでごはん／休けい／雨／遅れている／帰る）は、`SITUATION` の文をお願い文に足す
 - 現在地が10分より古い、または未取得のときは、ルートを聞く前に取り直す
