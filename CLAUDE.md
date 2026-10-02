@@ -17,10 +17,11 @@
   - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created }`（`address` は後から追加。古いデータにはないので空として扱う）
   - **データの形を変えるときは、古いデータも読めるようにすること**（オーナーのリストが消えないように）
 - データを守る案内（`#guard`）：iPhoneのSafariは7日間ひらかないサイトのデータを消すことがあるため、
-  - Safariで開いているiPhoneには「ホーム画面に追加」の手順を出す（ホーム画面アプリはSafariと保存場所が別なので、コピー→復元が必要）
-  - バックアップが一度もない、または7日以上前なら「データをコピー」をすすめる。「あとで」で3日間かくす
+  - ログインしていない人に「Googleでログイン」をすすめる（iPhoneのSafariなら「ホーム画面に追加」もすすめる。ホーム画面アプリでもログインすれば同じリストが出る）。ログインしない人向けに「データをコピー」も残す
+  - クラウドと一度でも同期できていれば（`tabi-navi-sync` に userId と lastSync がある）カードは出さない
+  - 出す条件：iPhoneのSafari、またはバックアップが一度もない／7日以上前。「あとで」で3日間かくす
   - 起動時に `navigator.storage.persist()` を呼ぶ
-- クラウド保存（作成中。`?cloud=1` で一度開くか、設定の「クラウド保存（試作中）を試す」を押すと、以後 localStorage `tabi-navi-cloud` の印で表示される）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン
+- クラウド保存（「旅の設定・バックアップ」の中。だれにでも表示）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン。supabase-js は起動時に読みこむ（読めなくても手元保存で動く）
   - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS。likes・routes はみんなで版で追加）
   - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
   - 同期：localStorage が手元のコピー。変更は `cloudMark(id, "up"|"del")`／`cloudMarkTrip()` で印をつけ、`runSync()` が送る→受け取る（クラウドが正。未送信の変更だけ手元を優先）

@@ -105,17 +105,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   <!-- データを守る案内（ホーム画面に追加・バックアップ） -->
   <section class="card stack guard" id="guard" hidden aria-labelledby="h-guard">
     <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><h2 id="h-guard" style="font-size:16px">リストが消えないように</h2><button class="link" type="button" id="guard-close">あとで</button></div>
-    <div class="stack" id="guard-home" hidden style="gap:6px">
-      <p class="note" style="color:var(--ink)">iPhoneのSafariは、7日間ひらかなかったサイトのデータを自動で消すことがあります。ホーム画面に追加して、そこから開くと消えにくくなります。</p>
-      <ol class="note" style="color:var(--ink)">
-        <li>下の「データをコピー」を押す（今のリストを写しておく）</li>
-        <li>Safariの「共有」ボタン（見つからなければ「…」の中）→「ホーム画面に追加」</li>
-        <li>ホーム画面の「旅ナビ」から開き、「旅の設定・バックアップ」→「データを貼り付けて復元」</li>
-      </ol>
-      <p class="note">ホーム画面から開いたアプリは、Safariとは別の場所にデータを保存します。なので、3の貼り付けが必要です。</p>
+    <p class="note" style="color:var(--ink)">いまのリストは、このスマホの中にだけ保存されています。Googleでログインすると、クラウドにも保存されて、スマホのデータが消えても元に戻せます。</p>
+    <div class="row"><button class="btn small" type="button" id="guard-login">Googleでログイン</button></div>
+    <div class="stack" id="guard-home" hidden style="gap:4px">
+      <p class="note" style="color:var(--ink)">iPhoneでは、ホーム画面に追加して使うのがおすすめです（Safariの「共有」→「ホーム画面に追加」。見つからなければ「…」の中）。ホーム画面のアプリでもGoogleでログインすれば、同じリストが出てきます。</p>
     </div>
-    <p class="note" id="guard-backup" hidden style="color:var(--ink)"></p>
-    <div class="row"><button class="btn small" type="button" id="guard-copy">データをコピー</button><span class="msg" id="guard-msg"></span></div>
+    <p class="note" id="guard-backup" hidden></p>
+    <div class="row"><button class="btn ghost small" type="button" id="guard-copy">データをコピー</button><span class="msg" id="guard-msg"></span></div>
   </section>
 
   <!-- いま -->
@@ -198,7 +194,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <label>旅のメモ（Claudeに毎回伝えたいこと）<textarea id="trip-memo" maxlength="400" placeholder="例：母と2人旅。階段が多い所は少なめに。ICOCA持ち。お昼は和食がいい"></textarea></label>
       <label class="row" style="flex-direction:row;gap:8px;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="allow-new" style="width:auto" checked> リストにない近くのおすすめも提案してもらう</label>
       <div class="stack" style="gap:6px">
-        <span class="note">バックアップ：データはこのスマホのブラウザにだけ保存されています。機種変更やブラウザ変更の前にコピーしておくと安心です。</span>
+        <span class="note" id="bk-note">バックアップ：データはこのスマホのブラウザにだけ保存されています。機種変更やブラウザ変更の前にコピーしておくと安心です。</span>
         <div class="row">
           <button class="btn ghost small" type="button" id="export">データをコピー</button>
           <button class="btn ghost small" type="button" id="import-open">データを貼り付けて復元</button>
@@ -210,8 +206,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         </div>
         <span class="msg" id="bk-msg"></span>
       </div>
-      <div class="stack" id="cloud" hidden style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
-        <span class="note" style="color:var(--ink);font-weight:700">クラウド保存（試作中）</span>
+      <div class="stack" id="cloud" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
+        <span class="note" style="color:var(--ink);font-weight:700">クラウド保存</span>
         <p class="note" id="cloud-status">準備中…</p>
         <div class="stack" id="cloud-orphans" hidden style="gap:6px">
           <p class="note" style="color:var(--ink)" id="cloud-orphans-text"></p>
@@ -223,7 +219,6 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           <button class="btn ghost small" type="button" id="cloud-logout" hidden>ログアウト</button>
         </div>
       </div>
-      <a class="note" id="cloud-try" href="?cloud=1" hidden>クラウド保存（試作中）を試す</a>
     </div>
   </details>
 
@@ -279,14 +274,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const DAY = 86400000;
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  // クラウドと一度でも同期できていれば（＝ログイン中）、案内はいらない
+  const cloudReady = () => { try { const y = JSON.parse(localStorage.getItem("tabi-navi-sync") || "{}"); return !!(y.userId && y.lastSync); } catch { return false; } };
   function renderGuard(){
-    const now = Date.now(), b = state.backupAt;
+    const now = Date.now(), b = state.backupAt, ready = cloudReady();
     const needHome = isIOS && !standalone;
     const needBackup = state.spots.length > 0 && (!b || now - b > 7 * DAY);
-    $("guard").hidden = !(needHome || needBackup) || (state.guardHideUntil || 0) > now;
+    $("guard").hidden = ready || !(needHome || needBackup) || (state.guardHideUntil || 0) > now;
     $("guard-home").hidden = !needHome;
-    $("guard-backup").hidden = !needBackup || needHome;
-    $("guard-backup").textContent = b ? `最後のバックアップから${Math.floor((now - b) / DAY)}日たっています。念のため、もう一度コピーしてメモアプリなどに貼っておきましょう。` : "まだ一度もバックアップしていません。データをコピーして、メモアプリなどに貼っておくと安心です。";
+    $("guard-backup").hidden = false;
+    $("guard-backup").textContent = "ログインしない場合は、ときどき「データをコピー」でメモアプリなどに写しておくと安心です。" + (b ? `（最後にコピーしたのは${Math.floor((now - b) / DAY)}日前）` : "");
+    $("bk-note").textContent = ready ? "バックアップ：リストはクラウドにも保存されています。念のため、ここからコピーもできます。" : "バックアップ：データはこのスマホのブラウザにだけ保存されています。Googleでログインするか、ときどきコピーしておくと安心です。";
     $("bk-last").textContent = b ? `最後にコピーした日：${new Date(b).getMonth() + 1}月${new Date(b).getDate()}日` : "まだ一度もコピーしていません";
   }
   async function backup(msgId){
@@ -295,17 +293,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     $(msgId).textContent = ok ? "コピーしました。メモアプリなどに貼って保存してください" : "コピーできませんでした";
   }
   $("guard-copy").onclick = () => backup("guard-msg");
+  $("guard-login").onclick = () => cloudLogin();
   $("guard-close").onclick = () => { state.guardHideUntil = Date.now() + 3 * DAY; save(); };
   renderGuard();
 
-  // ---------- クラウド保存（試作中。?cloud=1 で開いたときだけ動く） ----------
+  // ---------- クラウド保存（Googleでログインした人だけ。ログインしなくても今までどおり動く） ----------
   const SUPA_URL = "https://cnnwxwiqauyawngkpapk.supabase.co";
   const SUPA_KEY = "sb_publishable_A3y_3DhT3JNGVbOE3KEDxw_JQcz4JkS"; // publishable key（公開してよいキー。RLS で守る）
-  // 一度 ?cloud=1 で開いたら、次からも出す（ホーム画面アプリはURLを変えられないため）
-  const CLOUD_KEY = "tabi-navi-cloud";
-  if (new URLSearchParams(location.search).has("cloud")) { try { localStorage.setItem(CLOUD_KEY, "1"); } catch {} }
-  let CLOUD_ON = false; try { CLOUD_ON = localStorage.getItem(CLOUD_KEY) === "1"; } catch {}
-  $("cloud-try").hidden = CLOUD_ON;
   let sb = null, session = null;
   function loadScript(src){
     return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); });
@@ -341,8 +335,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     kind: r.kind, when: r.when_text, map: r.map, memo: r.memo, done: r.done, created: Date.parse(r.created_at) });
 
   // 変更の印をつける（ログインしていなくてもつけておき、ログインしたら送る）
-  function cloudMark(id, op){ if (!CLOUD_ON) return; sync.dirty[id] = op; saveSync(); scheduleSync(); }
-  function cloudMarkTrip(){ if (!CLOUD_ON) return; sync.tripDirty = true; saveSync(); scheduleSync(); }
+  function cloudMark(id, op){ sync.dirty[id] = op; saveSync(); scheduleSync(); }
+  function cloudMarkTrip(){ sync.tripDirty = true; saveSync(); scheduleSync(); }
   let syncTimer = null, syncing = false, syncAgain = false;
   function scheduleSync(delay = 800){ clearTimeout(syncTimer); syncTimer = setTimeout(runSync, delay); }
 
@@ -418,6 +412,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
 
   function renderCloud(msg){
+    renderGuard();
     const st = $("cloud-status");
     $("cloud-login").hidden = !!session; $("cloud-logout").hidden = !session; $("cloud-sync").hidden = !session;
     if (!session) $("cloud-orphans").hidden = true;
@@ -432,15 +427,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     st.textContent = who + (n ? `まだ送っていない変更が${n}件あります` : t ? `クラウドに保存ずみ（場所 ${state.spots.length}件・${pad(t.getHours())}:${pad(t.getMinutes())}）` : "クラウドとつないでいます…");
   }
   async function initCloud(){
-    if (!CLOUD_ON) return;
-    $("cloud").hidden = false;
     if (!SUPA_KEY) { $("cloud-status").textContent = "キーがまだ設定されていません"; return; }
     try { if (!window.supabase) await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"); }
     catch { $("cloud-status").textContent = "クラウドの部品を読みこめませんでした。このスマホの中には今までどおり保存されます"; return; }
     sb = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
     sb.auth.onAuthStateChange((_ev, s) => {
       // ログインから戻ってきたときの ?code=… をURLから消す
-      if (s && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname + "?cloud=1");
+      if (s && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname);
       const was = session && session.user.id; session = s;
       if (s && was !== s.user.id) scheduleSync(0); else renderCloud();
     });
@@ -448,11 +441,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     addEventListener("online", () => scheduleSync(0));
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") scheduleSync(300); });
   }
-  $("cloud-login").onclick = async () => {
-    $("cloud-status").textContent = "Googleのログイン画面へ移動します…";
-    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + "?cloud=1" } });
+  async function cloudLogin(){
+    if (!sb) { toast("クラウドの準備ができていません。電波を確認して、少し待ってからもう一度押してください"); return; }
+    $("cloud-status").textContent = "Googleのログイン画面へ移動します…"; toast("Googleのログイン画面へ移動します…");
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname } });
     if (error) $("cloud-status").textContent = "ログインを始められませんでした（" + error.message + "）";
-  };
+  }
+  $("cloud-login").onclick = cloudLogin;
   // ログアウトしても、このスマホの中のリストはそのまま残す
   $("cloud-logout").onclick = async () => { await sb.auth.signOut(); sync = emptySync(null); saveSync(); renderCloud(); };
   $("cloud-sync").onclick = () => scheduleSync(0);
@@ -703,7 +698,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("import-do").onclick = () => {
     try { const s = JSON.parse($("import-text").value); if (!s || !Array.isArray(s.spots)) throw 0;
       state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, backupAt: Date.now() }; save();
-      if (CLOUD_ON) { s.spots.forEach(x => sync.dirty[x.id] = "up"); sync.replaceAll = true; sync.tripDirty = true; saveSync(); }
+      s.spots.forEach(x => sync.dirty[x.id] = "up"); sync.replaceAll = true; sync.tripDirty = true; saveSync();
       location.reload();
     } catch { $("bk-msg").textContent = "データの形がちがうようです。コピーした文をそのまま貼ってください"; }
   };
