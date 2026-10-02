@@ -28,16 +28,19 @@
   - 同期の帳面は localStorage `tabi-navi-sync`（userId・tripId・dirty・orphans など）。新しい場所の id は uuid。古い id はハッシュで決まった uuid に変える（端末がちがっても同じ id になる）
   - はじめてつないだ端末にクラウドにない場所があれば、自動で送らずに「追加しますか？」と聞く（ほかの端末で消した場所がよみがえらないように）
   - 旅のメモ（trip-memo）は trips.memo に保存。いまは1人1つの旅だけ使う
-- 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗したら緯度経度のまま続ける）
+- 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗・4秒たっても返事がないときは緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）
   - `https://claude.ai/new?q=...` を開く（入力欄に自動で入らない環境では貼り付けてもらう）
+  - URL が `URL_MAX`（12000文字）を超えたら文は入れずに開き、貼り付けを案内する。日本語はURLで1文字9文字になるので、お願い文の決まった文章は短く保つ（現在地の地図リンクは入れない。場所の地図リンクは住所がなく短いときだけ）
 - Googleマップのリンク読みこみ：「場所を追加」の URL 欄に貼ると、名前・住所・エリアを自動で入れる（空の欄だけ）
   - 長いURL（`google.com/maps?q=〒… 住所 名前` や `/maps/place/名前/`）はページの中だけで読み取る
   - 短縮リンク（`maps.app.goo.gl`）は Supabase Edge Function（ダッシュボード上の名前は `hyper-function`、コードは `supabase/functions/resolve-map/index.ts`）で長いURLに戻す。呼び先は `index.html` の `RESOLVER`（プロジェクト `cnnwxwiqauyawngkpapk`。空なら短縮リンクは読まない）
   - 営業時間・Webサイトは取らない（当日 Claude に調べてもらう）
 - クイックボタン（次どこ行く？／近くでごはん／休けい／雨／遅れている／帰る）は、`SITUATION` の文をお願い文に足す
 - 現在地が10分より古い、または未取得のときは、ルートを聞く前に取り直す
+  - 取り直し中はボタンに「現在地を取得中…」と出して押せなくする。位置情報は10秒、住所変換（Nominatim）は4秒であきらめる
+  - 取れなかったときは前の位置で作り、「○分前の位置で作りました」と知らせる。15分より古い位置はお願い文に「いまは移動しているかも」と書く
 
 ## デザインのきまり
 - スマホ片手で使う1列レイアウト。下に固定の「ルートを聞く」バーがある

@@ -85,6 +85,7 @@ details.card[open] > summary{margin-bottom:10px}
 .dock .in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
 .quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .quick::-webkit-scrollbar{display:none}
+.quick button:disabled{opacity:.5}
 .quick button{flex:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 12px;cursor:pointer}
 .go{font-family:var(--display);font-size:17px;width:100%;padding:13px}
 .toast{position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:99px;font-size:13px;z-index:6;max-width:90vw}
@@ -226,7 +227,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   <section class="card stack" id="preview" hidden aria-label="Claudeに送る内容">
     <div class="row" style="justify-content:space-between"><h2>Claudeに送る内容</h2><button class="link" type="button" id="pv-close">閉じる</button></div>
     <a class="btn go" id="pv-open" href="https://claude.ai/new" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">コピーしてClaudeを開く</a>
-    <p class="note">Claudeが開いたら、入力欄に文が入っていればそのまま送信。空なら長押しで貼り付けて送信してください。</p>
+    <p class="note" id="pv-hint">Claudeが開いたら、入力欄に文が入っていればそのまま送信。空なら長押しで貼り付けて送信してください。</p>
     <pre class="prompt" id="pv-text"></pre>
     <div class="row"><button class="btn ghost small" type="button" id="pv-copy">文だけコピー</button></div>
   </section>
@@ -477,7 +478,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   async function reverse(lat, lng){
     // 住所に変換（OpenStreetMap の無料サービス。失敗しても緯度経度で続行）
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&accept-language=ja`);
+      // 電波が弱いと返事が来ないことがあるので、4秒であきらめる
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&accept-language=ja`, { signal: AbortSignal.timeout(4000) });
       if (!r.ok) return "";
       const j = await r.json(); const a = j.address || {};
       const parts = [a.province || a.state, a.city || a.town || a.village, a.city_district || a.suburb, a.quarter || a.neighbourhood].filter(Boolean);
@@ -485,7 +487,12 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       return [...new Set(parts)].join(" ") + poi;
     } catch { return ""; }
   }
+  let hereTask = null; // 取得中なら、同じ作業を使い回す（ボタンの連打で何回も取りに行かないように）
   function getHere(){
+    if (!hereTask) hereTask = getHereOnce().finally(() => { hereTask = null; });
+    return hereTask;
+  }
+  function getHereOnce(){
     return new Promise(resolve => {
       if (!navigator.geolocation) { toast("この端末では位置情報が使えません"); resolve(false); return; }
       $("geo").disabled = true; $("place-sub").textContent = "現在地を取得中…";
@@ -499,7 +506,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         $("geo").disabled = false; renderHere();
         toast(e.code === 1 ? "位置情報が許可されていません（設定 → Safari/Chrome → 位置情報）" : "現在地を取得できませんでした");
         resolve(false);
-      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
     });
   }
   $("geo").onclick = getHere;
@@ -633,40 +640,41 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function buildPrompt(kind){
     const d = new Date(), S = id => $(id).value.trim();
     const h = state.here;
-    const lines = [];
-    lines.push("あなたは旅先の案内係です。私の「いまの状況」と「行きたい場所リスト」から、いまからの最適なルートを提案してください。", "");
-    lines.push("## いまの状況");
-    lines.push(`- 現在日時：${fmtDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    // URLに入れると日本語は1文字が9文字になるので、決まった文章はできるだけ短くする
+    const L = [];
+    L.push("旅先の案内係として、いまの状況と行きたい場所から、これからのルートを考えてください。", "");
+    L.push("## いま");
+    L.push(`- 日時：${fmtDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`);
     if (h) {
       const age = Math.round((Date.now() - h.at) / 60000);
-      lines.push(`- 現在地：${h.address ? h.address + "／" : ""}緯度 ${h.lat}, 経度 ${h.lng}（${age <= 1 ? "たった今取得" : age + "分前に取得"}）`);
-      lines.push(`  地図：${mapsQ(h.lat + "," + h.lng)}`);
-    } else lines.push("- 現在地：不明（場所のメモを参考にしてください）");
-    if (S("here-memo")) lines.push(`- 場所のメモ：${S("here-memo")}`);
-    lines.push(`- 今日の終わり：${S("end-time") || "未定"} に ${S("end-place") || "（戻る場所は未定）"} へ戻る`);
-    lines.push(`- 移動手段：${S("mode")}／人数：${S("people") || 1}人／体力：${S("energy")}${S("weather") ? "／天気：" + S("weather") : ""}`);
-    if (S("trip-memo")) lines.push(`- 旅のメモ：${S("trip-memo")}`);
-    lines.push("");
+      L.push(`- 現在地：${h.address ? h.address + " " : ""}(${h.lat},${h.lng})${age <= 1 ? "" : `（${age}分前の位置${age > 15 ? "。いまは移動しているかも" : ""}）`}`);
+    } else L.push("- 現在地：不明");
+    if (S("here-memo")) L.push(`- 場所のメモ：${S("here-memo")}`);
+    L.push(`- 終わり：${S("end-time") || "未定"}に${S("end-place") || "（未定）"}へ戻る`);
+    L.push(`- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}${S("weather") ? "／" + S("weather") : ""}`);
+    if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
+    L.push("");
     const todo = sorted().filter(s => !s.done), done = state.spots.filter(s => s.done);
-    lines.push("## 行きたい場所（上ほど行きたい）");
-    if (!todo.length) lines.push("- （リストは空です）");
+    L.push("## 行きたい場所（上ほど優先）");
+    if (!todo.length) L.push("- なし");
     todo.forEach((s, i) => {
-      const info = [s.kind, s.area, s.address ? "住所" + s.address : "", s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望:" + s.when : ""].filter(Boolean).join("／");
-      lines.push(`${i+1}. ${"★".repeat(s.prio)} ${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " メモ：" + s.memo.replace(/\s+/g, " ") : ""}${s.map ? " 地図：" + s.map : ""}`);
+      const info = [s.kind, s.address || s.area, s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
+      // 地図リンクは、住所がないときだけ、短いものに限って入れる
+      const map = s.map && !s.address && s.map.length <= 80 ? " " + s.map : "";
+      L.push(`${i+1}. ${"★".repeat(s.prio)}${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " " + s.memo.replace(/\s+/g, " ") : ""}${map}`);
     });
-    if (done.length) lines.push(`- もう行った所：${done.map(s => s.name).join("、")}`);
-    lines.push("");
-    lines.push("## お願い");
-    if (kind && SITUATION[kind]) lines.push(`★いまの状況：${SITUATION[kind]}`);
-    lines.push(
-      `1. まずWebで調べて確認してください：各場所の今日（${WD[d.getDay()]}曜日）の営業時間・定休日・最終入場、現在地からの経路と所要時間。`,
-      "2. いまの時刻から「今日の終わり」までに回れる、いちばん効率のよい順番を決めてください。★が多い場所を優先し、入らない場所は理由と一緒に最後に書いてください。",
-      "3. 時間帯に合わせて、ごはん・休けいも入れてください。",
-      $("allow-new").checked ? "4. リストにない場所でも、近くて良い所があれば提案してOKです（その場合は「おすすめ」と書いてください）。" : "4. リストにない場所は、ごはん・休けい以外は入れないでください。",
-      "5. 移動ごとに「何時に出発・手段（何線・どのバス停）・所要時間・運賃の目安」を書き、Googleマップの経路リンク（https://www.google.com/maps/dir/?api=1&origin=出発地&destination=目的地&travelmode=transit）を付けてください。",
-      "6. スマホで読みやすいように、最初に「いますぐやること」を1行で書き、そのあと時刻順の短い箇条書きにしてください。確認できなかった情報は「要確認」と書いてください。"
+    if (done.length) L.push(`- 行った：${done.map(s => s.name).join("、")}`);
+    L.push("");
+    L.push("## お願い");
+    if (kind && SITUATION[kind]) L.push(`★${SITUATION[kind]}`);
+    L.push(
+      `- 今日（${WD[d.getDay()]}）の営業時間・定休日と、移動の経路・時間をWebで確かめる`,
+      "- 終わりの時刻までに回れる順番を決める。★の多い所を優先し、入らない所は理由を最後に",
+      "- ごはん・休けいも入れる。" + ($("allow-new").checked ? "近くの良い所は「おすすめ」として足してOK" : "リストにない場所は、ごはん・休けい以外入れない"),
+      "- 移動ごとに出発時刻・手段（路線やバス停）・所要時間・運賃の目安と、Googleマップの経路リンク",
+      "- 最初に「いますぐやること」を1行、そのあと時刻順の短い箇条書き。確かめられない情報は「要確認」"
     );
-    return lines.join("\n");
+    return L.join("\n");
   }
 
   async function copyText(t){
@@ -676,14 +684,30 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       let ok = false; try { ok = document.execCommand("copy"); } catch {} ta.remove(); return ok;
     }
   }
+  // claude.ai に渡せるURLの長さの上限（これより長いと、文は入れずにClaudeを開くだけにして貼り付けてもらう）
+  const URL_MAX = 12000;
+  let asking = false;
   async function ask(kind){
-    // 現在地が古い（10分以上前）か未取得なら取り直す
-    if (!state.here || Date.now() - state.here.at > 10 * 60000) await getHere();
-    const text = buildPrompt(kind);
-    $("pv-text").textContent = text; $("preview").hidden = false;
-    const url = "https://claude.ai/new?q=" + encodeURIComponent(text);
-    $("pv-open").href = url.length < 7000 ? url : "https://claude.ai/new";
-    $("preview").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (asking) return;
+    asking = true;
+    const btns = [$("ask"), ...$("quick").querySelectorAll("button")];
+    try {
+      // 現在地が古い（10分以上前）か未取得なら取り直す
+      if (!state.here || Date.now() - state.here.at > 10 * 60000) {
+        btns.forEach(b => b.disabled = true); $("ask").textContent = "現在地を取得中…";
+        const ok = await getHere();
+        if (!ok) toast(state.here ? `現在地が取れなかったので、${Math.round((Date.now() - state.here.at) / 60000)}分前の位置で作りました` : "現在地が取れなかったので、場所のメモをもとに作りました");
+      }
+      const text = buildPrompt(kind);
+      $("pv-text").textContent = text; $("preview").hidden = false;
+      const url = "https://claude.ai/new?q=" + encodeURIComponent(text);
+      const fits = url.length <= URL_MAX;
+      $("pv-open").href = fits ? url : "https://claude.ai/new";
+      $("pv-hint").textContent = fits ? "Claudeが開いたら、入力欄に文が入っていればそのまま送信。空なら長押しで貼り付けて送信してください。" : "文が長いので、Claudeが開いたら入力欄を長押しして「ペースト」で貼り付けて送信してください（コピーは自動でします）。";
+      $("preview").scrollIntoView({ behavior: "smooth", block: "start" });
+    } finally {
+      btns.forEach(b => b.disabled = false); $("ask").textContent = "いまからのルートを聞く"; asking = false;
+    }
   }
   $("ask").onclick = () => ask("");
   $("quick").onclick = e => { const b = e.target.closest("[data-q]"); if (b) ask(b.dataset.q); };
