@@ -229,13 +229,21 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <p class="note">ルートを考えてもらうときに使う、駅・バス停・空港・港を登録します。お願い文に入るので、Claudeが「この駅から乗る」「この駅で降りる」を考えて、ルートを組めます。自動で探せるのは駅とバス停です（空港・港は手で登録してください）。</p>
         <div class="stack" id="hub-list"></div>
         <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
+          <span class="note" style="color:var(--ink);font-weight:700">行きたい場所から、駅・バス停を提案してもらう</span>
+          <label>行きたい場所（名前か住所）<input id="hub-dest" maxlength="80" placeholder="例：金閣寺、京都市北区金閣寺町1"></label>
+          <div class="row"><button class="btn small" type="button" id="hub-suggest">提案してもらう</button></div>
+        </div>
+        <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
           <span class="note" style="color:var(--ink);font-weight:700">近くの駅・バス停を探す</span>
           <div class="grid">
             <label>探す場所<select id="hub-center"></select></label>
             <label>はんい<select id="hub-radius"><option value="500">500m</option><option value="1000" selected>1km</option><option value="2000">2km</option></select></label>
           </div>
           <div class="row"><button class="btn ghost small" type="button" id="hub-find">探す</button></div>
-          <span class="note" id="hub-find-msg"></span>
+        </div>
+        <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
+          <span class="note" style="color:var(--ink);font-weight:700">探した結果</span>
+          <span class="note" id="hub-find-msg">上の「提案してもらう」か「探す」を押すと、ここに出ます。</span>
           <div class="stack" id="hub-found" style="gap:4px"></div>
         </div>
         <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
@@ -1306,23 +1314,47 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     state.spots.filter(s => !s.done && hasPos(s)).forEach(s => out.push({ v: "s:" + s.id, t: `場所：${s.name}`, p: s }));
     return out;
   }
+  // 駅・バス停などのリンク（確実に開けるもの：Googleマップと検索）
+  const HUB_SEARCH = { "駅": "路線図 時刻表", "バス停": "時刻表 路線", "空港": "アクセス 時刻表", "港": "フェリー 時刻表" };
+  const hubFull = h => h.kind === "駅" && !/駅$/.test(h.name) ? h.name + "駅" : h.kind === "バス停" && !/バス停|停留所/.test(h.name) ? h.name + " バス停" : h.name;
+  const gUrl = q => "https://www.google.com/search?q=" + encodeURIComponent(q);
+  const walkMin = d => Math.max(1, Math.round(d * 1300 / 80)); // 直線距離×1.3 ÷ 分速80m（目安）
+  const walkText = d => d <= 2.5 ? `・徒歩約${walkMin(d)}分（目安）` : "";
   function renderHubList(){
     const box = $("hub-list"), ad = activeDay(); box.textContent = "";
     $("hub-sum").textContent = hubs().length ? `（${hubs().length}か所）` : "";
     if (!hubs().length) box.append(el("p", "note", "まだ登録していません。"));
+    const base = ad && (hasBase(ad.am) ? ad.am : hasBase(ad.pm) ? ad.pm : null);
     hubs().forEach(h => {
+      const wrap = el("div", "stack"); wrap.style.gap = "2px";
       const r = el("div", "mem"), left = el("span", null, `${h.kind}　${h.name}`);
       const d = distText(h, ad);
       left.append(el("span", "note", d ? `　${d}（直線）` : (hasPos(h) ? "" : "　位置はまだ分かりません")));
       const del = el("button", "link", "削除"); del.type = "button";
       del.onclick = () => { if (!confirm(`「${h.name}」を削除しますか？`)) return; state.plan.hubs = hubs().filter(x => x.id !== h.id); changePlan(); };
-      r.append(left, del); box.append(r);
+      r.append(left, del);
+      const links = el("div", "row"); links.style.gap = "14px"; links.style.fontSize = "13px";
+      const a = (t, href) => { const x = el("a", null, t); x.href = href; x.target = "_blank"; x.rel = "noopener"; links.append(x); };
+      a("地図", mapsQ([hubFull(h), h.address].filter(Boolean).join(" ")));
+      a("路線図・時刻表", gUrl(`${hubFull(h)} ${HUB_SEARCH[h.kind] || "時刻表"}`));
+      if (base) a("拠点からの経路", `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(hasPos(base) ? `${base.lat},${base.lng}` : [base.name, base.address].filter(Boolean).join(" "))}&destination=${encodeURIComponent(hasPos(h) ? `${h.lat},${h.lng}` : [hubFull(h), h.address].filter(Boolean).join(" "))}&travelmode=transit`);
+      if (h.url) a("貼ったリンク", h.url);
+      const ed = el("button", "link", h.url ? "リンクを直す" : "リンクを貼る"); ed.type = "button"; ed.style.fontSize = "13px";
+      ed.onclick = () => {
+        const u = prompt("路線図や時刻表などのURLを貼ってください（空にすると消えます）", h.url || ""); if (u === null) return;
+        const v = u.trim();
+        if (v && !/^https?:\/\//i.test(v)) { toast("http:// か https:// で始まるURLを入れてください"); return; }
+        if (v) h.url = v; else delete h.url;
+        changePlan();
+      };
+      links.append(ed);
+      wrap.append(r, links); box.append(wrap);
     });
     const sel = $("hub-center"), prev = sel.value; sel.textContent = "";
     hubCenters().forEach(c => { const o = document.createElement("option"); o.value = c.v; o.textContent = c.t; sel.append(o); });
     if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
     $("hub-find").disabled = !sel.options.length;
-    $("hub-find-msg").textContent = sel.options.length ? "" : "位置が分かる拠点や場所がまだありません。先に位置を調べてください。";
+    if (!$("hub-found").childElementCount) $("hub-find-msg").textContent = sel.options.length ? "" : "位置が分かる拠点や場所がまだありません。先に位置を調べてください。";
   }
   async function locateHub(id){
     const h0 = hubs().find(x => x.id === id); if (!h0) return false;
@@ -1366,30 +1398,69 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     }
     return { err: why || "原因不明" };
   }
-  $("hub-find").onclick = async () => {
-    const c = hubCenters().find(x => x.v === $("hub-center").value); if (!c) return;
-    const msg = $("hub-find-msg"), box = $("hub-found"); box.textContent = ""; msg.textContent = "探しています…"; $("hub-find").disabled = true;
-    const res = await overpass(c.p, Number($("hub-radius").value)), els = res.els;
-    $("hub-find").disabled = false;
-    if (!els) { msg.textContent = `探せませんでした（${res.err}）。電波を確認して、少し待ってからもう一度ためしてください。それでもだめなときは、下の「手で登録する」から入れてください。`; return; }
+  // 探した結果（OpenStreetMap）を、同じ名前でまとめて、近い順にする
+  function summarizeHubs(els, c){
     const best = new Map(), r5 = v => Math.round(v * 1e5) / 1e5;
     els.forEach(e => {
       const t = e.tags || {}, lat = e.lat, lng = e.lon;
       const kind = /^(station|halt|tram_stop)$/.test(t.railway || "") ? "駅" : t.highway === "bus_stop" ? "バス停" : "";
       const name = t["name:ja"] || t.name;
       if (!kind || !name || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      const d = km(c.p, { lat, lng }), key = kind + "|" + name, cur = best.get(key);
+      const d = km(c, { lat, lng }), key = kind + "|" + name, cur = best.get(key);
       if (!cur || d < cur.d) best.set(key, { kind, name, lat: r5(lat), lng: r5(lng), d });
     });
-    const items = [...best.values()].filter(x => !hubs().some(h => h.kind === x.kind && h.name === x.name)).sort((a, b) => a.d - b.d).slice(0, 15);
+    return [...best.values()].filter(x => !hubs().some(h => h.kind === x.kind && h.name === x.name)).sort((a, b) => a.d - b.d);
+  }
+  const hubErr = res => `探せませんでした（${res.err}）。電波を確認して、少し待ってからもう一度ためしてください。それでもだめなときは、下の「手で登録する」から入れてください。`;
+  function foundRow(x, onAdd, star){
+    const r = el("div", "mem"), left = el("span", null, `${x.kind}　${x.name}`);
+    left.append(el("span", "note", `　${fmtKm(x.d)}${walkText(x.d)}`));
+    if (star) { const s = el("span", "note", "　おすすめ"); s.style.color = "var(--star)"; s.style.fontWeight = "700"; left.append(s); }
+    left.style.minWidth = "0";
+    const right = el("span"); right.style.display = "flex"; right.style.gap = "10px"; right.style.alignItems = "center"; right.style.flex = "none"; right.style.whiteSpace = "nowrap";
+    const m = el("a", null, "地図"); m.href = mapsQ(`${x.lat},${x.lng}`); m.target = "_blank"; m.rel = "noopener"; m.style.fontSize = "13px";
+    const b = el("button", "btn ghost small", "登録"); b.type = "button"; b.style.whiteSpace = "nowrap";
+    b.onclick = () => { if (addHub(x)) { r.remove(); toast(`「${x.name}」を登録しました`); if (onAdd) onAdd(); } };
+    right.append(m, b); r.append(left, right); return r;
+  }
+  $("hub-find").onclick = async () => {
+    const c = hubCenters().find(x => x.v === $("hub-center").value); if (!c) return;
+    const msg = $("hub-find-msg"), box = $("hub-found"); box.textContent = ""; msg.textContent = "探しています…"; $("hub-find").disabled = true;
+    const res = await overpass(c.p, Number($("hub-radius").value));
+    $("hub-find").disabled = false;
+    if (!res.els) { msg.textContent = hubErr(res); return; }
+    const items = summarizeHubs(res.els, c.p).slice(0, 15);
     msg.textContent = items.length ? `${c.t} の近くで、${items.length}件見つかりました。登録したいものの「登録」を押してください。` : "見つかりませんでした。はんいを広げるか、手で登録してください。";
-    items.forEach(x => {
-      const r = el("div", "mem"), left = el("span", null, `${x.kind}　${x.name}`); left.append(el("span", "note", `　${fmtKm(x.d)}`));
-      const b = el("button", "btn ghost small", "登録"); b.type = "button";
-      b.onclick = () => { if (addHub(x)) { r.remove(); toast(`「${x.name}」を登録しました`); } };
-      r.append(left, b); box.append(r);
-    });
+    items.forEach(x => box.append(foundRow(x)));
   };
+  // 行きたい場所（名前か住所）を入れると、いちばん近い駅とバス停を提案する
+  $("hub-suggest").onclick = async () => {
+    const text = $("hub-dest").value.trim(), msg = $("hub-find-msg"), box = $("hub-found"); box.textContent = "";
+    if (!text) { msg.textContent = "行きたい場所の名前か住所を入れてください。"; return; }
+    const btn = $("hub-suggest"); btn.disabled = true; msg.textContent = "場所を調べています…";
+    const pos = parseLatLng(text) || await geocode({ address: text, name: text });
+    if (!pos) { btn.disabled = false; msg.textContent = "場所が見つかりませんでした。名前を変えるか、住所か「緯度, 経度」で入れてください。"; return; }
+    msg.textContent = "近くの駅・バス停を探しています…";
+    let res = await overpass(pos, 1000);
+    if (res.els && !res.els.length) res = await overpass(pos, 3000); // 1km以内に無ければ、3kmまで広げる
+    btn.disabled = false;
+    if (!res.els) { msg.textContent = hubErr(res); return; }
+    const items = summarizeHubs(res.els, pos);
+    const sts = items.filter(x => x.kind === "駅").slice(0, 3), bus = items.filter(x => x.kind === "バス停").slice(0, 3);
+    const head = el("div", "note"); head.style.color = "var(--ink)";
+    head.append(document.createTextNode(`「${text}」`));
+    const chk = el("a", null, "（見つかった場所を地図で確認）"); chk.href = mapsQ(`${pos.lat},${pos.lng}`); chk.target = "_blank"; chk.rel = "noopener"; head.append(chk, document.createTextNode(" の近くです。"));
+    if (!sts.length && !bus.length) { msg.textContent = ""; box.append(head, el("p", "note", "3km以内に、駅もバス停も見つかりませんでした（すでに登録ずみのものは出しません）。手で登録してください。")); return; }
+    msg.textContent = "おすすめ（いちばん近いもの）を、まとめて登録することもできます。";
+    box.append(head);
+    const rec = [sts[0], bus[0]].filter(Boolean);
+    const section = (title, list) => { if (!list.length) return; box.append(el("span", "note", title)); list.forEach((x, i) => box.append(foundRow(x, null, i === 0))); };
+    section("いちばん近い駅", sts); section("いちばん近いバス停", bus);
+    const all = el("button", "btn small", `おすすめをまとめて登録（${rec.map(x => x.name).join("・")}）`); all.type = "button";
+    all.onclick = () => { rec.forEach(x => addHub(x)); toast("おすすめを登録しました"); box.textContent = ""; msg.textContent = `${rec.map(x => "「" + x.name + "」").join("と")}を登録しました。`; };
+    box.append(all);
+  };
+
   // ---- Googleマップのリンクから、名前・住所・位置を読みとる ----
   function urlCoords(u){ const m = u.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) || u.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : {}; }
   async function mapInfoFromUrl(raw){
