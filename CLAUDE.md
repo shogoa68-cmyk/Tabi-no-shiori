@@ -14,7 +14,9 @@
 - ファイルは `index.html` の1枚だけ（HTML・CSS・JS をすべてこの中に書く。ビルドなし・ライブラリなし。例外：クラウド保存用の supabase-js だけは jsDelivr から版を固定して読みこむ）
 - 保存先：`localStorage`（キー `tabi-navi-v1`）。端末のブラウザの中だけに保存
   - 形：`{ spots: [...], here: {lat,lng,acc,at,address} | null, settings: {要素id: 値}, backupAt?: 最後にコピーした時刻, guardHideUntil?: 案内を隠す期限 }`
-  - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created }`（`address` は後から追加。古いデータにはないので空として扱う）
+  - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created, lat?, lng?, by?, geoFail? }`（`address`・`lat/lng` は後から追加。古いデータにはないので空として扱う。`by`＝追加した人（クラウドから来たときだけ）、`geoFail`＝位置を調べて見つからなかった印で、手元だけ）
+  - plan（日程と拠点）：`{ start: "YYYY-MM-DD", end, days: { 日付: { am?: 基地, pm?: 基地 } } }`、基地＝`{ name, address, lat?, lng? }`。`state.plan` は旅ごと（クラウドでは `trip_plans.plan`）。入れていない日は、朝＝前の日の夜、夜＝朝と同じになる（`effBase`）。古いデータにはないので空として扱う
+  - settings の `day-sel`（ルート提案に使う日。`auto`＝今日、旅の外なら1日目）、`start-time`（朝の出発時刻）
   - **データの形を変えるときは、古いデータも読めるようにすること**（オーナーのリストが消えないように）
 - データを守る案内（`#guard`）：iPhoneのSafariは7日間ひらかないサイトのデータを消すことがあるため、
   - ログインしていない人に「Googleでログイン」をすすめる（iPhoneのSafariなら「ホーム画面に追加」もすすめる。ホーム画面アプリでもログインすれば同じリストが出る）。ログインしない人向けに「データをコピー」も残す
@@ -22,7 +24,8 @@
   - 出す条件：iPhoneのSafari、またはバックアップが一度もない／7日以上前。「あとで」で3日間かくす
   - 起動時に `navigator.storage.persist()` を呼ぶ
 - クラウド保存（「旅の設定・バックアップ」の中。だれにでも表示）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン。supabase-js は起動時に読みこむ（読めなくても手元保存で動く）
-  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS）と `002_share.sql`（profiles / trip_invites / spot_likes / routes ＋ 招待の関数 `preview_invite`・`join_trip`）。002 が未実行でも場所の同期は動き、共有の欄だけ隠れる（`cloud.features`）
+  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS）、`002_share.sql`（profiles / trip_invites / spot_likes / routes ＋ 招待の関数 `preview_invite`・`join_trip`）、`003_plan_coords.sql`（spots.lat/lng、trip_plans）。002 が未実行でも場所の同期は動き、共有の欄だけ隠れる（`cloud.features`）。003 が未実行でも同じ（`cloud.coords`・`cloud.planOk`。拠点は手元だけに保存し、位置の欄がないときは toRow に lat/lng を入れない）
+  - 位置は、クラウドに無くて手元にあるときは手元を残して次の同期で送る（`pullSpots`）。拠点（plan）は `sync.planDirty` で送る→受け取る（同期の最中に直したときは次の同期でまた送る）
   - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
   - 同期：localStorage が手元のコピー。変更は `cloudMark(id, "up"|"del")`／`cloudMarkTrip()` で印をつけ、`runSync()` が送る→受け取る（クラウドが正。未送信の変更だけ手元を優先）
   - 同期の帳面は localStorage `tabi-navi-sync`（userId・tripId・dirty・orphans など）。新しい場所の id は uuid。古い id はハッシュで決まった uuid に変える（端末がちがっても同じ id になる）
@@ -34,6 +37,12 @@
   - 旅がなくなった（削除された・外された）ときは、その旅の場所とメモを手元からも消してから別の旅につなぐ（別の旅に混ざらないように）
   - いいね（`spot_likes`）・保存したルート（`routes`）・名前（`profiles`、Googleの名前）は、同期の帳面を通さず直接書く（いいねは先に画面を変えて、失敗したら戻す）。場所には `by`（追加した人）が入る。メンバーが2人以上のときだけ「追加：○○」「いいねの名前」「お願い文の行きたい○人」を出す
   - テスト：本物のSupabaseにはつなげないので、Node で作った「Supabase のふり」（表・RLS・招待・rpc）で2人分の流れを確かめた
+- 日程と拠点・距離・簡易地図（`日程と拠点` カード、`距離マップ` カード）：
+  - 「今日のルート」：`activeDay()` の朝・夜の拠点をお願い文に入れ、「戻る場所」が空なら夜の拠点を使う。クイックボタン「1日の予定を組む」（`day`）は「朝の拠点→観光→夜の拠点」を頼み、出発時刻を入れる。場所ごとに各拠点からの直線距離（`distInfo`）を付ける
+  - 「日割りプランを提案してもらう」（`buildPlanPrompt`）：日ごとの朝・夜の拠点（A・B…の記号）と、場所ごとの各拠点からの距離を入れ、どの日にまわすかの割りふりを頼む。返事は「保存したルート」に保存できる
+  - 位置（`geocode`）：日本語の住所は国土地理院の住所検索（`msearch.gsi.go.jp`）、見つからない・海外は OpenStreetMap Nominatim の `search`（1秒に1回まで、順番に）。場所の保存時に裏で調べ、「位置をまとめて調べる」で再試行。位置は手で入れてもよい（`緯度, 経度`）。Googleマップの長いURLに `!3d..!4d..` や `@緯度,経度` があればそれを使う。住所を変えると調べなおす
+  - 距離は直線距離（`km`＝球面の距離）。実際の道のり・電車の時間は Claude が調べる
+  - 簡易地図：拠点（朝の拠点があればそれ）を中心に、北を上にして点を並べる（地図タイルなし、SVG）。輪は 1・2・5 ずつの刻み。点をタップすると名前・距離と拠点への線が出る
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗・4秒たっても返事がないときは緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）

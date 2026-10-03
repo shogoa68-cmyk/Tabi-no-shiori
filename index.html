@@ -89,6 +89,20 @@ details.card[open] > summary{margin-bottom:10px}
 .quick button{flex:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 12px;cursor:pointer}
 .go{font-family:var(--display);font-size:17px;width:100%;padding:13px}
 .toast{position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:99px;font-size:13px;z-index:6;max-width:90vw}
+/* 距離マップ */
+.mp{width:100%;height:auto;display:block;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.mp text{font-family:var(--body);font-size:10px;fill:var(--ink);paint-order:stroke;stroke:var(--paper);stroke-width:3px;stroke-linejoin:round}
+.mp .ring{fill:none;stroke:var(--line);stroke-dasharray:3 3}
+.mp .axis{stroke:var(--line);stroke-width:1}
+.mp text.rl{fill:var(--muted)}
+.mp .p3{fill:var(--star)}.mp .p2{fill:var(--accent)}.mp .p1{fill:var(--muted)}
+.mp .base{fill:var(--ink)}
+.mp .sel{stroke:var(--ink);stroke-width:2.5}
+.mp .hit{fill:transparent;cursor:pointer}
+.mp .link{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 3;opacity:.6}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.legend i.sq{border-radius:2px}
 /* みんなで使う版 */
 .likes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
 .like{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:2px 11px;cursor:pointer}
@@ -138,6 +152,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   <!-- いま -->
   <section class="card now" aria-label="いまの状況">
     <div class="clock"><span class="t" id="clock">--:--</span><span class="d" id="date"></span></div>
+    <div class="note" id="day-line" hidden style="color:var(--ink)"></div>
     <div class="here">
       <span class="pin" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg></span>
       <div class="txt">
@@ -151,8 +166,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     </div>
     <label>場所のメモ（「清水寺の入口」「駅の西口」など。あれば精度が上がります）<input id="here-memo" maxlength="60"></label>
     <div class="grid">
+      <label>朝の出発時刻<input id="start-time" type="time" value="09:00"></label>
       <label>今日の終わり（戻る時刻）<input id="end-time" type="time" value="18:00"></label>
-      <label>戻る場所<input id="end-place" maxlength="60" placeholder="例：ホテル、京都駅"></label>
+      <label>戻る場所（空なら夜の拠点）<input id="end-place" maxlength="60" placeholder="例：ホテル、京都駅"></label>
       <label>移動手段
         <select id="mode"><option>電車・バス＋徒歩</option><option>徒歩のみ</option><option>車</option><option>タクシーもOK</option><option>レンタサイクル</option></select></label>
       <label>いまの体力
@@ -189,6 +205,24 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <div class="stack" id="trip-members" hidden style="gap:4px"></div>
       <p class="note" id="trip-note"></p>
     </section>
+    <details class="card" id="plan-card">
+      <summary>日程と拠点（宿） <span class="note" id="plan-sum"></span></summary>
+      <div class="stack">
+        <p class="note">旅の日付を入れて、日ごとに拠点（宿・駅・空港など）を登録します。朝と夜で拠点が別のときは、両方入れてください。入れなかった日は、前の日の夜の拠点（なければ朝の拠点）と同じになります。</p>
+        <div class="grid">
+          <label>旅の開始日<input type="date" id="plan-start"></label>
+          <label>旅の終了日<input type="date" id="plan-end"></label>
+        </div>
+        <label>ルートの提案に使う日<select id="day-select"></select></label>
+        <div class="stack" id="plan-days"></div>
+        <div class="row">
+          <button class="btn small" type="button" id="plan-ask">日割りプランを提案してもらう</button>
+          <button class="btn ghost small" type="button" id="geo-all">位置をまとめて調べる</button>
+        </div>
+        <span class="note" id="geo-msg"></span>
+        <p class="note" id="plan-note"></p>
+      </div>
+    </details>
     <div class="spots" id="spots"></div>
 
     <details class="card" id="add-box">
@@ -218,6 +252,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           <label>行きたい時間帯<input id="s-when" maxlength="30" placeholder="例：夕方、ランチに"></label>
         </div>
         <label>住所<input id="s-address" maxlength="120" placeholder="例：京都府京都市伏見区深草藪之内町68"></label>
+        <label>位置（緯度, 経度。空なら住所から自動）<input id="s-latlng" maxlength="40" inputmode="text" placeholder="例：34.9671, 135.7727"></label>
         <label>メモ<textarea id="s-memo" maxlength="300" placeholder="例：予約 12:00。千本鳥居の上まで行きたい"></textarea></label>
         <div class="row">
           <button class="btn" type="submit" id="s-save">追加する</button>
@@ -227,6 +262,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       </form>
     </details>
   </section>
+
+  <!-- 距離マップ（拠点と行きたい場所の位置関係） -->
+  <details class="card" id="map-card" hidden>
+    <summary>距離マップ <span class="note" id="map-sum"></span></summary>
+    <div class="stack">
+      <div id="map-box"></div>
+      <div class="legend" id="map-legend"></div>
+      <p class="note" id="map-info" style="color:var(--ink)"></p>
+      <p class="note" id="map-note"></p>
+    </div>
+  </details>
 
   <!-- 保存したルート（ログイン中・共有の表が使えるときだけ） -->
   <details class="card" id="routes-card" hidden>
@@ -288,6 +334,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 <div class="dock">
   <div class="in">
     <div class="quick" id="quick">
+      <button type="button" data-q="day">1日の予定を組む</button>
       <button type="button" data-q="next">次どこ行く？</button>
       <button type="button" data-q="lunch">近くでごはん</button>
       <button type="button" data-q="cafe">休けいしたい</button>
@@ -310,12 +357,16 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // ---------- 保存（このブラウザの中だけ） ----------
   let state = { spots: [], here: null, settings: {} };
   try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && Array.isArray(s.spots)) state = Object.assign(state, s); } catch {}
+  // 日程と拠点（古いデータにはないので、空として扱う）
+  function normPlan(p){ const o = p && typeof p === "object" ? p : {}; return { start: typeof o.start === "string" ? o.start : "", end: typeof o.end === "string" ? o.end : "", days: o.days && typeof o.days === "object" ? o.days : {} }; }
+  const planEmpty = p => !p.start && !p.end && !Object.keys(p.days).length;
+  state.plan = normPlan(state.plan);
   if (!state.settings || typeof state.settings !== "object") state.settings = {}; // 古い・こわれたデータでも止まらないように
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} renderGuard(); };
   // 「このデータは消さないで」とブラウザにお願いする（できる端末だけ）
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch {}
 
-  const SETTING_IDS = ["end-time","end-place","mode","energy","weather","people","here-memo","trip-memo"];
+  const SETTING_IDS = ["start-time","end-time","end-place","mode","energy","weather","people","here-memo","trip-memo"];
   SETTING_IDS.forEach(id => { if (state.settings[id] != null) $(id).value = state.settings[id]; $(id).addEventListener("change", () => { state.settings[id] = $(id).value; save(); if (id === "trip-memo") cloudMarkTrip(); }); });
   if (state.settings["allow-new"] != null) $("allow-new").checked = state.settings["allow-new"];
   $("allow-new").onchange = () => { state.settings["allow-new"] = $("allow-new").checked; save(); };
@@ -355,14 +406,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const SUPA_KEY = "sb_publishable_A3y_3DhT3JNGVbOE3KEDxw_JQcz4JkS"; // publishable key（公開してよいキー。RLS で守る）
   let sb = null, session = null;
   // クラウドから受け取った、いまの旅のまわりの情報（このページを開いている間だけ覚えておく）
-  const cloud = { features: null /* 共有の表が使えるか：null=不明 */, trips: [], members: [], names: {}, likes: {}, routes: [], savedProfileFor: null };
+  const cloud = { features: null /* 共有の表が使えるか：null=不明 */, planOk: null /* 拠点の表が使えるか */, coords: null /* spots に位置の欄があるか */, trips: [], members: [], names: {}, likes: {}, routes: [], savedProfileFor: null };
   function loadScript(src){
     return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); });
   }
   // 同期の帳面（このブラウザだけ）：どの旅につないでいるか・まだ送っていない変更
   //   { userId, tripId, dirty: { 場所id: "up" | "del" }, tripDirty, replaceAll, lastSync, orphans: [クラウドにない手元の場所] }
   const SYNC_KEY = "tabi-navi-sync";
-  const emptySync = uid => ({ userId: uid, tripId: null, dirty: {}, tripDirty: false, replaceAll: false, lastSync: 0, orphans: [] });
+  const emptySync = uid => ({ userId: uid, tripId: null, dirty: {}, tripDirty: false, planDirty: false, replaceAll: false, lastSync: 0, orphans: [] });
   let sync = emptySync(null);
   try { Object.assign(sync, JSON.parse(localStorage.getItem(SYNC_KEY) || "{}")); } catch {}
   if (!sync.dirty || typeof sync.dirty !== "object") sync.dirty = {};
@@ -385,9 +436,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 画面の「場所」⇔ クラウドの行（spots の表）。by＝追加した人（クラウドから来たときだけ入る）
   const toRow = s => ({ id: s.id, trip_id: sync.tripId, name: s.name, prio: s.prio, area: s.area || "", address: s.address || "", stay: s.stay || null,
     hours: s.hours || "", closed: s.closed || "", kind: s.kind || "観光", when_text: s.when || "", map: s.map || "", memo: s.memo || "", done: !!s.done,
-    created_at: new Date(s.created || Date.now()).toISOString() });
+    created_at: new Date(s.created || Date.now()).toISOString(),
+    ...(cloud.coords ? { lat: hasPos(s) ? s.lat : null, lng: hasPos(s) ? s.lng : null } : {}) });
   const fromRow = r => ({ id: r.id, name: r.name, prio: r.prio, area: r.area, address: r.address, stay: r.stay, hours: r.hours, closed: r.closed,
-    kind: r.kind, when: r.when_text, map: r.map, memo: r.memo, done: r.done, created: Date.parse(r.created_at), by: r.created_by });
+    kind: r.kind, when: r.when_text, map: r.map, memo: r.memo, done: r.done, created: Date.parse(r.created_at), by: r.created_by,
+    lat: r.lat != null ? r.lat : undefined, lng: r.lng != null ? r.lng : undefined });
   const me = () => session ? session.user.id : null;
   const nameOf = uid => uid === me() ? "自分" : (cloud.names[uid] || "メンバー");
   const likeIds = id => cloud.likes[id] || [];
@@ -404,6 +457,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 変更の印をつける（ログインしていなくてもつけておき、ログインしたら送る）
   function cloudMark(id, op){ sync.dirty[id] = op; saveSync(); scheduleSync(); }
   function cloudMarkTrip(){ sync.tripDirty = true; saveSync(); scheduleSync(); }
+  function cloudMarkPlan(){ sync.planDirty = true; saveSync(); scheduleSync(); }
   let syncTimer = null, syncPromise = null, syncAgain = false, wantTrip = null;
   function scheduleSync(delay = 800){ clearTimeout(syncTimer); syncTimer = setTimeout(runSync, delay); }
   // 同期を1回やる。終わったら true（失敗したら false）を返す。やっている最中なら、その終わりを待つ
@@ -425,6 +479,16 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const { error } = await sb.from("trips").update({ memo: state.settings["trip-memo"] || "" }).eq("id", sync.tripId);
       if (error) throw error;
       sync.tripDirty = false; saveSync();
+    }
+    if (sync.planDirty) { // 日程と拠点。表がまだ無いときは、この端末の中だけに保存する
+      if (cloud.planOk === false) sync.planDirty = false;
+      else {
+        const snap = JSON.stringify(state.plan);
+        const { error } = await sb.from("trip_plans").upsert({ trip_id: sync.tripId, plan: state.plan });
+        if (error) { if (featureMissing(error)) { cloud.planOk = false; sync.planDirty = false; } else throw error; }
+        else if (JSON.stringify(state.plan) === snap) sync.planDirty = false; // 送っている間に直したときは、次の同期でまた送る
+        saveSync();
+      }
     }
     const ups = Object.keys(sync.dirty).filter(id => sync.dirty[id] === "up").map(id => state.spots.find(x => x.id === id)).filter(Boolean);
     const dels = Object.keys(sync.dirty).filter(id => sync.dirty[id] === "del");
@@ -448,11 +512,32 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     ]);
     if (e4) throw e4; if (e5) throw e5;
     const local = new Map(state.spots.map(x => [x.id, x]));
-    const next = rows.map(r => sync.dirty[r.id] === "up" && local.has(r.id) ? local.get(r.id) : fromRow(r)).filter(x => sync.dirty[x.id] !== "del");
+    const next = rows.map(r => {
+      const l = local.get(r.id);
+      if (sync.dirty[r.id] === "up" && l) return l;
+      const o = fromRow(r);
+      // クラウドに位置がなくて手元にあるときは、手元を残す（クラウドに位置の欄ができたら送る）
+      if (!hasPos(o) && l && hasPos(l)) { o.lat = l.lat; o.lng = l.lng; if (cloud.coords) sync.dirty[o.id] = "up"; }
+      return o;
+    }).filter(x => sync.dirty[x.id] !== "del");
     state.spots.forEach(x => { if (sync.dirty[x.id] === "up" && !next.some(n => n.id === x.id)) next.push(x); });
     state.spots = next;
     if (!sync.tripDirty && trip) { state.settings["trip-memo"] = trip.memo; if (document.activeElement !== $("trip-memo")) $("trip-memo").value = trip.memo; }
-    save(); renderSpots();
+    const cp = await fetchPlan(sync.tripId); let planNew = false;
+    if (cp && !sync.planDirty && JSON.stringify(cp) !== JSON.stringify(state.plan)) { state.plan = cp; planNew = true; }
+    saveSync(); save(); renderSpots();
+    if (planNew && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#plan-days"))) renderPlan();
+  }
+  // クラウドの日程と拠点を取る（表がなければ null。そのときは手元だけで使う）
+  async function fetchPlan(tripId){
+    if (cloud.planOk === false) return null;
+    const { data, error } = await sb.from("trip_plans").select("plan").eq("trip_id", tripId);
+    if (error) { if (featureMissing(error)) cloud.planOk = false; return null; }
+    cloud.planOk = true; return data[0] ? normPlan(data[0].plan) : null;
+  }
+  async function probeCoords(){ // spots に位置の欄（lat, lng）があるか
+    const { error } = await sb.from("spots").select("lat").limit(1);
+    cloud.coords = !error ? true : /lat|column|schema cache/i.test(error.message || "") ? false : null;
   }
   // メンバー・いいね・保存したルート・名前を受け取る（共有の表がまだ無くても、場所の同期はそのまま動くようにする）
   async function pullMeta(){
@@ -480,10 +565,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // いまの旅の手元のコピー（場所・メモ・同期の印）をすべて捨てる。クラウドの中身は消さない
   function dropLocalTrip(){
     resetForm();
-    state.spots = []; state.settings["trip-memo"] = ""; $("trip-memo").value = "";
-    sync.tripId = null; sync.dirty = {}; sync.tripDirty = false; sync.orphans = []; sync.replaceAll = false;
+    state.spots = []; state.settings["trip-memo"] = ""; $("trip-memo").value = ""; state.plan = normPlan(null);
+    sync.tripId = null; sync.dirty = {}; sync.tripDirty = false; sync.planDirty = false; sync.orphans = []; sync.replaceAll = false;
     cloud.members = []; cloud.likes = {}; cloud.routes = [];
-    save(); saveSync();
+    save(); saveSync(); renderPlan();
   }
   // 使う旅を切りかえる／はじめてつなぐ
   //   first：はじめてつないだ端末。手元にしかない場所は、勝手に送らずにあとで聞く
@@ -495,11 +580,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const there = new Set(rows.map(r => r.id));
       sync.orphans = state.spots.filter(sp => !there.has(sp.id));
       sync.dirty = {}; sync.tripDirty = !t.memo && !!state.settings["trip-memo"]; // クラウドのメモが空なら、手元のメモを送る
+      const cp = await fetchPlan(t.id); // クラウドに日程があればそれを使う。なければ手元の日程を送る
+      if (cp && !planEmpty(cp)) { state.plan = cp; sync.planDirty = false; renderPlan(); } else sync.planDirty = !planEmpty(state.plan);
     } else {
       resetForm();
       state.spots = []; sync.orphans = []; sync.dirty = {}; sync.tripDirty = false; sync.replaceAll = false;
       state.settings["trip-memo"] = t.memo || ""; $("trip-memo").value = t.memo || "";
       cloud.likes = {}; cloud.routes = []; cloud.members = [];
+      state.plan = (await fetchPlan(t.id)) || normPlan(null); sync.planDirty = false; renderPlan();
     }
     sync.tripId = t.id; saveSync(); save();
   }
@@ -522,6 +610,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const { data: trips, error } = await sb.from("trips").select("id,title,memo,created_by").order("created_at");
     if (error) throw error;
     cloud.trips = trips;
+    if (cloud.coords === null) await probeCoords();
     const find = id => trips.find(t => t.id === id);
     // 旅がなくなった（削除された・メンバーから外された）：その旅の中身は手元からも消す（別の旅に混ざらないように）
     if (sync.tripId && !find(sync.tripId)) dropLocalTrip();
@@ -538,6 +627,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (e2) throw e2;
       cloud.trips.push(t); sync.tripId = t.id; sync.orphans = [];
       state.spots.forEach(sp => { sync.dirty[sp.id] = "up"; }); // 新しい旅：手元の場所を全部送る
+      sync.planDirty = !planEmpty(state.plan);
       saveSync();
       await pushDirty();
     }
@@ -712,14 +802,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const st = $("cloud-status");
     $("cloud-login").hidden = !!session; $("cloud-logout").hidden = !session; $("cloud-sync").hidden = !session;
     if (!session) $("cloud-orphans").hidden = true;
-    renderTripCard(); renderRoutes(); renderJoin();
+    renderTripCard(); renderRoutes(); renderJoin(); renderPlanNote();
     if (!session) { st.textContent = "ログインしていません。Googleでログインすると、リストがクラウドにも保存されて、ほかの端末でも見られるようになります"; return; }
     const o = sync.orphans || [];
     $("cloud-orphans").hidden = !o.length;
     $("cloud-orphans-text").textContent = o.length ? `この端末にだけある場所が${o.length}件あります（${o.map(x => x.name).join("、")}）。ほかの端末で消した場所かもしれません。クラウドに追加しますか？` : "";
     const who = session.user.email + " でログイン中。";
     if (msg) { st.textContent = who + msg; return; }
-    const n = Object.keys(sync.dirty).length + (sync.tripDirty ? 1 : 0);
+    const n = Object.keys(sync.dirty).length + (sync.tripDirty ? 1 : 0) + (sync.planDirty ? 1 : 0);
     const t = sync.lastSync ? new Date(sync.lastSync) : null, trip = cloud.trips.find(x => x.id === sync.tripId);
     st.textContent = who + (n ? `まだ送っていない変更が${n}件あります` : t ? `クラウドに保存ずみ（${trip ? "「" + trip.title + "」・" : ""}場所 ${state.spots.length}件・${pad(t.getHours())}:${pad(t.getMinutes())}）` : "クラウドとつないでいます…");
   }
@@ -749,7 +839,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // ログアウトしても、このスマホの中のリストはそのまま残す
   $("cloud-logout").onclick = async () => {
     await sb.auth.signOut(); sync = emptySync(null); saveSync();
-    cloud.trips = []; cloud.members = []; cloud.likes = {}; cloud.routes = []; cloud.savedProfileFor = null;
+    cloud.trips = []; cloud.members = []; cloud.likes = {}; cloud.routes = []; cloud.savedProfileFor = null; cloud.planOk = null; cloud.coords = null;
     renderCloud(); renderSpots();
   };
   $("cloud-sync").onclick = () => scheduleSync(0);
@@ -814,13 +904,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   renderHere(); setInterval(renderHere, 60000);
 
   // ---------- 行きたい場所 ----------
-  let prio = 2, editing = null;
+  let prio = 2, editing = null, editOrigLL = "";
   $("s-prio").onclick = e => { const b = e.target.closest("[data-p]"); if (!b) return; prio = Number(b.dataset.p);
     [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c === b ? "true" : "false")); };
   const stayText = m => !m ? "" : m >= 60 ? `${m/60}時間` : `${m}分`;
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
-  function renderSpots(){
+  function renderSpots(){ renderSpotList(); renderMap(); }
+  function renderSpotList(){
     const box = $("spots"); box.textContent = "";
     const showDone = $("show-done").checked;
     const left = state.spots.filter(s => !s.done).length;
@@ -837,6 +928,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const meta = [s.kind, s.area, s.stay ? "滞在 " + stayText(s.stay) : "", s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.when].filter(Boolean).join("・");
       if (meta) body.append(el("div","meta", meta));
       if (s.memo) body.append(el("div","meta", s.memo));
+      const dt = distText(s); if (dt) body.append(el("div","meta", dt + "（直線）"));
       if (session && cloud.members.length > 1 && s.by) body.append(el("div","meta","追加：" + nameOf(s.by)));
       if (sharedOn()) {
         const ids = likeIds(s.id), row = el("div","likes");
@@ -855,15 +947,275 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   $("show-done").onchange = renderSpots;
 
+  // ---------- 日程と拠点・距離・簡易地図 ----------
+  const PLAN_MAX_DAYS = 60;
+  const hasBase = b => !!b && !!(b.name || b.address);
+  const hasPos = o => !!o && Number.isFinite(o.lat) && Number.isFinite(o.lng);
+  const sameBase = (a, b) => (a.name || "") === (b.name || "") && (a.address || "") === (b.address || "");
+  const fmtBase = b => b ? ([b.name, b.address].filter(Boolean).join(" ") || "なし") : "なし（未登録）";
+  const baseName = b => b ? (b.name || b.address || "未設定") : "未設定";
+  const dkey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const dparse = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+  const md = k => `${Number(k.slice(5, 7))}/${Number(k.slice(8, 10))}`;
+  const dayLabel = (k, i) => `${i + 1}日目 ${md(k)}（${WD[dparse(k).getDay()]}）`;
+  function dayList(){
+    const p = state.plan, out = [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end) || p.end < p.start) return out;
+    let cur = dparse(p.start);
+    while (dkey(cur) <= p.end && out.length < PLAN_MAX_DAYS) { out.push(dkey(cur)); cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1); }
+    return out;
+  }
+  // その日の朝・夜の拠点。入れていなければ、朝は「前の日の夜」、夜は「朝」と同じ
+  function effBase(list, i, slot){
+    const d = state.plan.days[list[i]] || {};
+    if (slot === "pm") return hasBase(d.pm) ? d.pm : effBase(list, i, "am");
+    if (hasBase(d.am)) return d.am;
+    return i > 0 ? effBase(list, i - 1, "pm") : null;
+  }
+  // ルート提案に使う日（選んだ日。「自動」なら今日、旅の外なら1日目）
+  function activeDay(){
+    const list = dayList(); if (!list.length) return null;
+    const sel = state.settings["day-sel"];
+    let i = sel && sel !== "auto" ? list.indexOf(sel) : -1;
+    if (i < 0) i = list.indexOf(dkey(new Date()));
+    if (i < 0) i = 0;
+    const am = effBase(list, i, "am"), pm = effBase(list, i, "pm");
+    return { i, date: list[i], today: list[i] === dkey(new Date()), am, pm, same: hasBase(am) && hasBase(pm) && sameBase(am, pm), n: list.length };
+  }
+  // ---- 距離（直線） ----
+  function km(a, b){
+    const rad = x => x * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+  }
+  const fmtKm = v => v < 1 ? `約${Math.max(50, Math.round(v * 1000 / 50) * 50)}m` : `約${v < 10 ? v.toFixed(1) : Math.round(v)}km`;
+  function distInfo(s, ad){
+    ad = ad || activeDay(); if (!ad || !hasPos(s)) return [];
+    const out = [];
+    if (hasBase(ad.am) && hasPos(ad.am)) out.push({ label: ad.same || !hasBase(ad.pm) ? "拠点" : "朝の拠点", km: km(s, ad.am) });
+    if (!ad.same && hasBase(ad.pm) && hasPos(ad.pm)) out.push({ label: hasBase(ad.am) ? "夜の拠点" : "拠点", km: km(s, ad.pm) });
+    return out;
+  }
+  const distText = (s, ad) => distInfo(s, ad).map(x => `${x.label}から${fmtKm(x.km)}`).join("／");
+  // ---- 位置（住所から調べる：日本は国土地理院、それ以外・見つからないときは OpenStreetMap） ----
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let osmLast = 0, geoChain = Promise.resolve();
+  function getJson(url, gap){ // 1つずつ順番に調べる（OpenStreetMapは1秒に1回までのお願いがあるため）
+    return (geoChain = geoChain.then(async () => {
+      if (gap) { const w = osmLast + gap - Date.now(); if (w > 0) await sleep(w); osmLast = Date.now(); }
+      try { const r = await fetch(url, { signal: AbortSignal.timeout(7000) }); return r.ok ? await r.json() : null; } catch { return null; }
+    }));
+  }
+  const cleanAddr = a => toHalf(a || "").replace(/^〒?\s*\d{3}-?\d{4}\s*/, "").trim();
+  async function geocode({ address, name, area }){
+    const addr = cleanAddr(address);
+    const pick = (lat, lng) => { lat = Number(lat); lng = Number(lng); return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat: Math.round(lat * 1e5) / 1e5, lng: Math.round(lng * 1e5) / 1e5 } : null; };
+    if (addr && /[ぁ-んァ-ン一-龥]/.test(addr)) {
+      const j = await getJson("https://msearch.gsi.go.jp/address-search/AddressSearch?q=" + encodeURIComponent(addr));
+      const c = Array.isArray(j) && j[0] && j[0].geometry && j[0].geometry.coordinates;
+      if (c) { const r = pick(c[1], c[0]); if (r) return r; }
+    }
+    const osm = async text => { const j = await getJson("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ja&q=" + encodeURIComponent(text), 1100); return Array.isArray(j) && j[0] ? pick(j[0].lat, j[0].lon) : null; };
+    if (addr) { const r = await osm(addr); if (r) return r; }
+    const t = [name, area].filter(Boolean).join(" ");
+    return t ? await osm(t) : null;
+  }
+  function parseLatLng(t){
+    const m = toHalf(t).match(/^\s*(-?\d+(?:\.\d+)?)\s*[,，\s]\s*(-?\d+(?:\.\d+)?)\s*$/); if (!m) return null;
+    const lat = Number(m[1]), lng = Number(m[2]);
+    return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  }
+  // 場所の位置を調べる（取れたら true）。調べている間に場所が書きかえられたら、結果は使わない
+  async function locate(id){
+    const s0 = state.spots.find(x => x.id === id); if (!s0) return false;
+    const r = await geocode(s0);
+    const s = state.spots.find(x => x.id === id); if (!s || s.address !== s0.address || s.name !== s0.name) return false;
+    if (r) { s.lat = r.lat; s.lng = r.lng; delete s.geoFail; save(); cloudMark(id, "up"); } else { s.geoFail = true; save(); }
+    renderSpots(); return !!r;
+  }
+  function changePlan(){ save(); cloudMarkPlan(); renderSpots(); renderDayLine(); }
+  async function locateBase(k, slot){
+    const b0 = (state.plan.days[k] || {})[slot]; if (!b0) return false;
+    const r = await geocode(b0);
+    const b = (state.plan.days[k] || {})[slot];
+    if (!b || b.name !== b0.name || b.address !== b0.address) return false;
+    if (r) { b.lat = r.lat; b.lng = r.lng; changePlan(); }
+    refreshPlanLabels(); return !!r;
+  }
+  async function locateAll(){
+    const btn = $("geo-all"), msg = $("geo-msg"); btn.disabled = true;
+    const todo = [];
+    state.spots.filter(s => !s.done && !hasPos(s) && (s.address || s.name)).forEach(s => todo.push({ t: "spot", id: s.id, name: s.name }));
+    for (const k of Object.keys(state.plan.days)) for (const slot of ["am", "pm"]) { const b = state.plan.days[k][slot]; if (hasBase(b) && !hasPos(b)) todo.push({ t: "base", k, slot, name: baseName(b) + "（拠点）" }); }
+    let ok = 0; const bad = [];
+    for (let i = 0; i < todo.length; i++) {
+      msg.textContent = `位置を調べています（${i + 1}/${todo.length}）…`;
+      const x = todo[i], r = x.t === "spot" ? await locate(x.id) : await locateBase(x.k, x.slot);
+      if (r) ok++; else bad.push(x.name);
+    }
+    msg.textContent = !todo.length ? "位置が分かっていない場所はありません" : `${ok}件の位置が分かりました。` + (bad.length ? `分からなかったのは：${bad.join("、")}（住所を入れなおすか、位置を直接入れてください）` : "");
+    btn.disabled = false;
+  }
+  $("geo-all").onclick = locateAll;
+  // ---- 日程と拠点の画面 ----
+  function renderDayLine(){
+    const ad = activeDay(), e = $("day-line");
+    if (!ad) { e.hidden = true; return; }
+    e.hidden = false;
+    e.textContent = `${ad.today ? "今日" : "ルート提案に使う日"}は旅の${ad.i + 1}日目（${md(ad.date)}）：朝の拠点 ${baseName(ad.am)}${ad.same ? "（夜も同じ）" : "／夜の拠点 " + baseName(ad.pm)}`;
+  }
+  function planSummary(list, i){
+    const am = effBase(list, i, "am"), pm = effBase(list, i, "pm");
+    return `${dayLabel(list[i], i)}　朝：${am ? baseName(am) : "未設定"}／夜：${pm ? baseName(pm) : "未設定"}`;
+  }
+  // 入れていない欄に、「前の夜と同じ」などの目安を薄く出す／位置の取得状況を出す
+  function refreshPlanLabels(){
+    const list = dayList();
+    document.querySelectorAll("#plan-days [data-slot]").forEach(box => {
+      const k = box.dataset.date, i = list.indexOf(k), slot = box.dataset.slot; if (i < 0) return;
+      const own = (state.plan.days[k] || {})[slot], eff = effBase(list, i, slot);
+      const inh = own && hasBase(own) ? null : eff;
+      box.querySelector(".b-name").placeholder = inh && inh.name ? `${inh.name}（${slot === "am" ? "前の夜と同じ" : "朝と同じ"}）` : "拠点の名前（例：京都駅前ホテル）";
+      box.querySelector(".b-addr").placeholder = inh && inh.address ? inh.address : "住所";
+      const pos = box.querySelector(".b-pos");
+      pos.textContent = own && hasBase(own) ? (hasPos(own) ? "位置：分かっています" : "位置：まだ分かりません（住所を入れると自動で調べます）") : (inh ? "" : "");
+    });
+    document.querySelectorAll("#plan-days > details").forEach(d => { const i = list.indexOf(d.dataset.date); if (i >= 0) d.querySelector("summary").textContent = planSummary(list, i); });
+  }
+  function slotEditor(k, slot){
+    const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.slot = slot; box.dataset.date = k;
+    box.append(el("span", "note", slot === "am" ? "朝の拠点（出発する所）" : "夜の拠点（戻る所）"));
+    const mk = (cls, label, max) => { const i = el("input"); i.className = cls; i.maxLength = max; i.setAttribute("aria-label", label); return i; };
+    const url = mk("b-url", "GoogleマップのURL", 2000); url.type = "url"; url.placeholder = "Googleマップのリンクを貼る";
+    const name = mk("b-name", "拠点の名前", 60), addr = mk("b-addr", "拠点の住所", 120);
+    const msg = el("span", "note"), pos = el("span", "note b-pos");
+    const clear = el("button", "link", slot === "am" ? "空にする（前の夜と同じに戻す）" : "空にする（朝と同じに戻す）"); clear.type = "button"; clear.style.alignSelf = "flex-start";
+    const cur = () => (state.plan.days[k] || {})[slot] || {};
+    name.value = cur().name || ""; addr.value = cur().address || "";
+    const commit = coords => {
+      const day = state.plan.days[k] = state.plan.days[k] || {};
+      const nm = name.value.trim(), ad = addr.value.trim();
+      if (!nm && !ad) delete day[slot];
+      else {
+        const old = day[slot] || {}, b = { name: nm, address: ad };
+        if (old.name === nm && old.address === ad && hasPos(old)) { b.lat = old.lat; b.lng = old.lng; }
+        if (coords && hasPos(coords)) { b.lat = coords.lat; b.lng = coords.lng; }
+        day[slot] = b;
+      }
+      if (!day.am && !day.pm) delete state.plan.days[k];
+      changePlan(); refreshPlanLabels();
+      const b = (state.plan.days[k] || {})[slot];
+      if (hasBase(b) && !hasPos(b)) locateBase(k, slot);
+    };
+    name.onchange = addr.onchange = () => commit();
+    url.onchange = async () => {
+      if (!url.value.trim()) return;
+      msg.textContent = "読みこみ中…";
+      const info = await mapInfoFromUrl(url.value);
+      if (!info || !(info.name || info.address || hasPos(info))) { msg.textContent = "名前が見つかりませんでした。手で入れてください"; return; }
+      if (info.name && !name.value.trim()) name.value = info.name;
+      if (info.address && !addr.value.trim()) addr.value = info.address;
+      url.value = ""; msg.textContent = "入れました。ちがっていたら直してください"; commit(info);
+    };
+    clear.onclick = () => { name.value = ""; addr.value = ""; msg.textContent = ""; commit(); };
+    box.append(url, name, addr, pos, msg, clear);
+    return box;
+  }
+  function renderPlan(){
+    const list = dayList(), box = $("plan-days");
+    $("plan-start").value = state.plan.start; $("plan-end").value = state.plan.end;
+    $("plan-sum").textContent = list.length ? `（${list.length}日）` : "";
+    $("plan-ask").disabled = !list.length;
+    const sel = $("day-select"); sel.textContent = "";
+    const oa = document.createElement("option"); oa.value = "auto"; oa.textContent = "自動（今日。旅の外なら1日目）"; sel.append(oa);
+    list.forEach((k, i) => { const o = document.createElement("option"); o.value = k; o.textContent = dayLabel(k, i); sel.append(o); });
+    sel.value = list.includes(state.settings["day-sel"]) ? state.settings["day-sel"] : "auto";
+    renderPlanNote();
+    box.textContent = "";
+    if (!list.length) { box.append(el("p", "note", "開始日と終了日を入れると、日ごとの拠点を登録できます。")); renderDayLine(); renderSpots(); return; }
+    list.forEach(k => { const d = el("details", "rt"); d.dataset.date = k; d.append(el("summary", null, "")); const w = el("div", "stack"); w.style.gap = "12px"; w.append(slotEditor(k, "am"), slotEditor(k, "pm")); d.append(w); box.append(d); });
+    refreshPlanLabels(); renderDayLine(); renderSpots();
+  }
+  function renderPlanNote(){
+    $("plan-note").textContent = session && cloud.planOk === false ? "拠点をクラウドに保存して共有するには、Supabaseで 003_plan_coords.sql を実行してください。それまでは、この端末の中だけに保存されます。" : "";
+  }
+  function setPlanDate(which, v){
+    state.plan[which] = v;
+    if (state.plan.start && state.plan.end && state.plan.end < state.plan.start) { if (which === "start") state.plan.end = v; else state.plan.start = v; }
+    // 日程の外になった日の拠点は消す
+    const keep = new Set(dayList()); Object.keys(state.plan.days).forEach(k => { if (!keep.has(k)) delete state.plan.days[k]; });
+    changePlan(); renderPlan();
+  }
+  $("plan-start").onchange = () => setPlanDate("start", $("plan-start").value);
+  $("plan-end").onchange = () => setPlanDate("end", $("plan-end").value);
+  $("day-select").onchange = () => { state.settings["day-sel"] = $("day-select").value; save(); renderDayLine(); renderSpots(); };
+  // ---- 簡易地図（北が上。拠点を中心に、行きたい場所を本当の位置関係のまま点で並べる） ----
+  let mapSel = "";
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const sv = (tag, attrs, text) => { const e = document.createElementNS(SVGNS, tag); Object.entries(attrs || {}).forEach(([k, v]) => e.setAttribute(k, v)); if (text != null) e.textContent = text; return e; };
+  function renderMap(){
+    const card = $("map-card"), ad = activeDay(), showDone = $("show-done").checked;
+    const spots = state.spots.filter(s => hasPos(s) && (showDone || !s.done));
+    const bases = [];
+    if (ad && hasBase(ad.am) && hasPos(ad.am)) bases.push({ k: ad.same || !hasBase(ad.pm) ? "拠点" : "朝", b: ad.am });
+    if (ad && !ad.same && hasBase(ad.pm) && hasPos(ad.pm)) bases.push({ k: hasBase(ad.am) ? "夜" : "拠点", b: ad.pm });
+    const missing = state.spots.filter(s => !s.done && !hasPos(s)).length;
+    card.hidden = !state.spots.length && !bases.length;
+    if (card.hidden) return;
+    $("map-sum").textContent = spots.length ? `（${spots.length}か所）` : "";
+    const box = $("map-box"); box.textContent = "";
+    $("map-note").textContent = missing ? `${missing}件は位置がまだ分かりません。「日程と拠点」の「位置をまとめて調べる」を押してください。` : "";
+    const lg = $("map-legend"); lg.textContent = "";
+    if (!spots.length && !bases.length) { box.append(el("p", "note", "位置が分かっている場所がまだありません。")); $("map-info").textContent = ""; return; }
+    const c = bases[0] ? bases[0].b : { lat: spots.reduce((a, s) => a + s.lat, 0) / spots.length, lng: spots.reduce((a, s) => a + s.lng, 0) / spots.length };
+    const X0 = p => (p.lng - c.lng) * Math.cos(c.lat * Math.PI / 180) * 111.32, Y0 = p => (p.lat - c.lat) * 110.57;
+    const items = [...bases.map(x => ({ ...x.b, kind: "base", label: x.k })), ...spots.map(s => ({ ...s, kind: "spot" }))];
+    const R = Math.max(0.3, ...items.map(p => Math.hypot(X0(p), Y0(p))));
+    const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find(v => R * 1.1 / v <= 5) || 5000;
+    const cx = 180, cy = 180, scale = 150 / (R * 1.1), X = p => cx + X0(p) * scale, Y = p => cy - Y0(p) * scale;
+    const svg = sv("svg", { viewBox: "0 0 360 360", class: "mp", role: "img", "aria-label": "拠点と行きたい場所の位置関係の図（北が上）" });
+    svg.append(sv("line", { x1: cx, y1: 10, x2: cx, y2: 350, class: "axis" }), sv("line", { x1: 10, y1: cy, x2: 350, y2: cy, class: "axis" }));
+    for (let r = step; r <= R * 1.1 + 1e-9; r += step) {
+      svg.append(sv("circle", { cx, cy, r: r * scale, class: "ring" }), sv("text", { x: cx + 3, y: cy - r * scale - 2, class: "rl" }, r < 1 ? `${Math.round(r * 1000)}m` : `${r}km`));
+    }
+    svg.append(sv("text", { x: cx + 4, y: 16, class: "rl" }, "北"));
+    const many = spots.length > 12;
+    const place = (p, x, y, text) => { svg.append(sv("text", { x: x > 250 ? x - 10 : x + 10, y: y + 4, "text-anchor": x > 250 ? "end" : "start" }, text)); };
+    if (mapSel) { const t = spots.find(s => s.id === mapSel); if (t) bases.forEach(b => svg.append(sv("line", { x1: X(b.b), y1: Y(b.b), x2: X(t), y2: Y(t), class: "link" }))); }
+    items.filter(p => p.kind === "spot").forEach(p => {
+      const x = X(p), y = Y(p), g = sv("g", {});
+      g.append(sv("circle", { cx: x, cy: y, r: p.id === mapSel ? 8 : 6, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}` }));
+      if (!many || p.prio === 3 || p.id === mapSel) place(p, x, y, p.name.length > 9 ? p.name.slice(0, 9) + "…" : p.name);
+      const hit = sv("circle", { cx: x, cy: y, r: 16, class: "hit" }); hit.onclick = () => { mapSel = mapSel === p.id ? "" : p.id; renderMap(); };
+      g.append(hit); svg.append(g);
+    });
+    items.filter(p => p.kind === "base").forEach(p => { const x = X(p), y = Y(p); svg.append(sv("rect", { x: x - 7, y: y - 7, width: 14, height: 14, rx: 2, class: "base" })); place(p, x, y - 10, p.label); });
+    box.append(svg);
+    const lgi = (cls, t) => { const sp = el("span"); sp.append(el("i", cls)); sp.append(document.createTextNode(t)); lg.append(sp); };
+    lgi("sq", "拠点"); [3, 2, 1].forEach(n => { const sp = el("span"); const i = el("i"); i.style.background = n === 3 ? "var(--star)" : n === 2 ? "var(--accent)" : "var(--muted)"; sp.append(i, document.createTextNode("★".repeat(n))); lg.append(sp); });
+    lg.querySelector("i.sq").style.background = "var(--ink)";
+    const t = spots.find(s => s.id === mapSel);
+    $("map-info").textContent = t ? `${t.name}（${"★".repeat(t.prio)}）：${distText(t, ad) || "拠点が未登録です"}（直線距離）` : (bases[0] ? `輪は拠点からの直線距離（${step < 1 ? Math.round(step * 1000) + "m" : step + "km"}ごと）。点をタップすると名前と距離が出ます。` : "拠点が未登録なので、行きたい場所の中心を基準にしています。「日程と拠点」で拠点を入れてください。");
+  }
+  // ---- Googleマップのリンクから、名前・住所・位置を読みとる ----
+  function urlCoords(u){ const m = u.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) || u.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : {}; }
+  async function mapInfoFromUrl(raw){
+    const u = (raw.match(/https?:\/\/\S+/) || [""])[0]; if (!u) return null;
+    let long = u; if (isShort(u)) { long = await resolveShort(u); if (!long) return null; }
+    const p = parseMapUrl(long); if (!p) return null;
+    return Object.assign({}, p, urlCoords(long));
+  }
+
   const FIELDS = { name: "s-name", area: "s-area", address: "s-address", stay: "s-stay", hours: "s-hours", closed: "s-closed", kind: "s-kind", when: "s-when", map: "s-map", memo: "s-memo" };
   function resetForm(){
-    editing = null; $("spot-form").reset(); $("s-kind").value = "観光";
+    editing = null; editOrigLL = ""; $("spot-form").reset(); $("s-kind").value = "観光";
     prio = 2; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c.dataset.p === "2" ? "true" : "false"));
     $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を追加";
   }
   function startEdit(id){
     const s = state.spots.find(x => x.id === id); if (!s) return;
     editing = id; Object.entries(FIELDS).forEach(([k, fid]) => $(fid).value = s[k] != null ? s[k] : "");
+    $("s-latlng").value = hasPos(s) ? `${s.lat}, ${s.lng}` : ""; editOrigLL = $("s-latlng").value;
     prio = s.prio; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", Number(c.dataset.p) === prio ? "true" : "false"));
     $("s-save").textContent = "保存する"; $("s-cancel").hidden = false; $("add-title").textContent = `「${s.name}」を編集`;
     $("add-box").open = true; $("add-box").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -874,9 +1226,23 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const v = {}; Object.entries(FIELDS).forEach(([k, fid]) => v[k] = $(fid).value.trim());
     if (!v.name) { $("s-msg").textContent = "名前を入れてください"; return; }
     v.stay = v.stay ? Number(v.stay) : null; v.prio = prio;
-    if (editing) { Object.assign(state.spots.find(x => x.id === editing), v); cloudMark(editing, "up"); toast("保存しました"); }
-    else { const id = newId(); state.spots.push(Object.assign({ id, done: false, created: Date.now() }, v)); cloudMark(id, "up"); toast(`「${v.name}」を追加しました`); }
+    const llText = $("s-latlng").value.trim(); let ll = null;
+    if (llText) { ll = parseLatLng(llText); if (!ll) { $("s-msg").textContent = "位置は「34.96, 135.77」のように、緯度と経度を入れてください"; return; } }
+    let target;
+    if (editing) {
+      target = state.spots.find(x => x.id === editing);
+      const moved = (target.address || "") !== v.address || (!v.address && target.name !== v.name);
+      Object.assign(target, v);
+      if (ll && llText !== editOrigLL) { target.lat = ll.lat; target.lng = ll.lng; delete target.geoFail; } // 位置を直接入れた
+      else if (moved) { delete target.lat; delete target.lng; delete target.geoFail; } // 住所が変わったので、調べなおす
+      cloudMark(editing, "up"); toast("保存しました");
+    } else {
+      const id = newId(); target = Object.assign({ id, done: false, created: Date.now() }, v);
+      if (ll) { target.lat = ll.lat; target.lng = ll.lng; }
+      state.spots.push(target); cloudMark(id, "up"); toast(`「${v.name}」を追加しました`);
+    }
     save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots();
+    if (!hasPos(target)) locate(target.id); // 住所から位置を調べる（裏で）
   };
 
   // ---------- Googleマップのリンクから名前・住所を読みこむ ----------
@@ -926,15 +1292,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     $("s-load").disabled = false;
     // 長いURLは、場所を表す部分（q・ftid など）だけ残して短くする（お願い文が長くなりすぎないように）
     if (p && !isShort(u)) { const c = new URL(u); [...c.searchParams.keys()].forEach(k => { if (!["q","query","api","ftid","cid"].includes(k)) c.searchParams.delete(k); }); $("s-map").value = c.toString(); }
-    if (!p || !(p.name || p.address)) { msg.textContent = "名前が見つかりませんでした。手で入れてください"; return; }
+    const cc = urlCoords(long);
+    if (!p || !(p.name || p.address || hasPos(cc))) { msg.textContent = "名前が見つかりませんでした。手で入れてください"; return; }
     // すでに書いてある欄は上書きしない
     const got = [];
-    [["name","s-name","名前"],["address","s-address","住所"],["area","s-area","エリア"]].forEach(([k, id, label]) => { if (p[k] && !$(id).value.trim()) { $(id).value = p[k]; got.push(label); } });
+    if (hasPos(cc) && !$("s-latlng").value.trim()) { $("s-latlng").value = `${cc.lat}, ${cc.lng}`; got.push("位置"); }
+    [["name","s-name","名前"],["address","s-address","住所"],["area","s-area","エリア"]].forEach(([k, id, label]) => { if (p && p[k] && !$(id).value.trim()) { $(id).value = p[k]; got.push(label); } });
     msg.textContent = got.length ? got.join("・") + "を入れました。ちがっていたら直してください" : "入れる欄がありませんでした（すでに入っています）";
   }
   $("s-load").onclick = loadFromMap;
   $("s-map").addEventListener("paste", () => setTimeout(() => { if (!$("s-name").value.trim()) loadFromMap(); }, 0));
-  renderSpots();
+  renderPlan();
 
   // ---------- Claude へのお願い文を作る ----------
   const SITUATION = {
@@ -943,22 +1311,25 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     cafe: "少し休けいしたいです。近くで座って休めるカフェなどを2〜3件と、そのあとの流れを教えてください。",
     rain: "雨が降ってきました。屋内中心にルートを組みなおしてください。",
     late: "予定より遅れています。優先度の高い場所を守れるように、ルートを組みなおしてください。",
-    back: "そろそろ戻りたいです。戻る場所までのいちばん良い帰り方と、途中で寄れる所があれば教えてください。"
+    back: "そろそろ戻りたいです。戻る場所までのいちばん良い帰り方と、途中で寄れる所があれば教えてください。",
+    day: "朝の拠点を出発して、夜の拠点に戻る1日のルートを組んでください。拠点から近い場所をまとめて、移動の無駄が少ない順番にしてください。"
   };
   function buildPrompt(kind){
     const d = new Date(), S = id => $(id).value.trim();
-    const h = state.here;
+    const h = state.here, ad = activeDay();
     // URLに入れると日本語は1文字が9文字になるので、決まった文章はできるだけ短くする
     const L = [];
     L.push("旅先の案内係として、いまの状況と行きたい場所から、これからのルートを考えてください。", "");
     L.push("## いま");
     L.push(`- 日時：${fmtDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    if (ad) L.push(`- ${ad.today ? "今日" : "対象の日"}は旅の${ad.i + 1}日目（${md(ad.date)}）。朝の拠点：${fmtBase(ad.am)}${ad.same ? "（夜も同じ）" : `／夜の拠点：${fmtBase(ad.pm)}`}`);
     if (h) {
       const age = Math.round((Date.now() - h.at) / 60000);
       L.push(`- 現在地：${h.address ? h.address + " " : ""}(${h.lat},${h.lng})${age <= 1 ? "" : `（${age}分前の位置${age > 15 ? "。いまは移動しているかも" : ""}）`}`);
     } else L.push("- 現在地：不明");
     if (S("here-memo")) L.push(`- 場所のメモ：${S("here-memo")}`);
-    L.push(`- 終わり：${S("end-time") || "未定"}に${S("end-place") || "（未定）"}へ戻る`);
+    if (kind === "day") L.push(`- 出発：${S("start-time") || "09:00"}に朝の拠点から`);
+    L.push(`- 終わり：${S("end-time") || "未定"}に${S("end-place") || (ad && hasBase(ad.pm) ? baseName(ad.pm) : "（未定）")}へ戻る`);
     L.push(`- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}${S("weather") ? "／" + S("weather") : ""}`);
     if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
     L.push("");
@@ -966,7 +1337,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     L.push("## 行きたい場所（上ほど優先）");
     if (!todo.length) L.push("- なし");
     todo.forEach((s, i) => {
-      const info = [s.kind, s.address || s.area, sharedOn() && cloud.members.length > 1 && likeIds(s.id).length ? "行きたい" + likeIds(s.id).length + "人" : "", s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
+      const info = [s.kind, s.address || s.area, sharedOn() && cloud.members.length > 1 && likeIds(s.id).length ? "行きたい" + likeIds(s.id).length + "人" : "", ...distInfo(s, ad).map(x => `${x.label}から${fmtKm(x.km)}`), s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
       // 地図リンクは、住所がないときだけ、短いものに限って入れる
       const map = s.map && !s.address && s.map.length <= 80 ? " " + s.map : "";
       L.push(`${i+1}. ${"★".repeat(s.prio)}${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " " + s.memo.replace(/\s+/g, " ") : ""}${map}`);
@@ -979,6 +1350,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       `- 今日（${WD[d.getDay()]}）の営業時間・定休日と、移動の経路・時間をWebで確かめる`,
       "- 終わりの時刻までに回れる順番を決める。★の多い所を優先し、入らない所は理由を最後に",
       "- ごはん・休けいも入れる。" + ($("allow-new").checked ? "近くの良い所は「おすすめ」として足してOK" : "リストにない場所は、ごはん・休けい以外入れない"),
+      ...(todo.some(x => distInfo(x, ad).length) ? ["- 拠点からの距離は直線距離。実際の道のりや電車の時間は調べなおす"] : []),
       "- 移動ごとに出発時刻・手段（路線やバス停）・所要時間・運賃の目安と、Googleマップの経路リンク",
       "- 最初に「いますぐやること」を1行、そのあと時刻順の短い箇条書き。確かめられない情報は「要確認」"
     );
@@ -994,6 +1366,42 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   // claude.ai に渡せるURLの長さの上限（これより長いと、文は入れずにClaudeを開くだけにして貼り付けてもらう）
   const URL_MAX = 12000;
+  function presentPrompt(text, note){
+    $("pv-text").textContent = text; $("preview").hidden = false;
+    const url = "https://claude.ai/new?q=" + encodeURIComponent(text);
+    const fits = url.length <= URL_MAX;
+    $("pv-open").href = fits ? url : "https://claude.ai/new";
+    $("pv-hint").textContent = (fits ? "Claudeが開いたら、入力欄に文が入っていればそのまま送信。空なら長押しで貼り付けて送信してください。" : "文が長いので、Claudeが開いたら入力欄を長押しして「ペースト」で貼り付けて送信してください（コピーは自動でします）。") + (note ? " " + note : "");
+    $("preview").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  // 旅の前の計画用：行きたい場所を、拠点からの距離で日ごとに割りふってもらう
+  function buildPlanPrompt(){
+    const list = dayList(), S = id => $(id).value.trim(), bases = [];
+    const keyOf = b => (b.name || "") + "|" + (b.address || "");
+    const letter = b => { const k = keyOf(b); let i = bases.findIndex(x => keyOf(x) === k); if (i < 0) { bases.push(b); i = bases.length - 1; } return String.fromCharCode(65 + i); };
+    const L = ["旅先の案内係として、旅全体の日割りプランを考えてください。", "", "## 日程と拠点"];
+    list.forEach((k, i) => { const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"); L.push(`- ${dayLabel(k, i)} 朝:${am ? letter(am) : "なし"} 夜:${pm ? letter(pm) : "なし"}`); });
+    bases.forEach((b, i) => L.push(`  拠点${String.fromCharCode(65 + i)}：${fmtBase(b)}`));
+    L.push("", "## 旅の条件", `- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}`);
+    if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
+    const todo = sorted().filter(x => !x.done);
+    L.push("", "## 行きたい場所（上ほど優先。拠点からの直線距離つき）");
+    if (!todo.length) L.push("- なし");
+    todo.forEach((x, i) => {
+      const dist = bases.map((b, j) => hasPos(b) && hasPos(x) ? `拠点${String.fromCharCode(65 + j)}から${fmtKm(km(x, b))}` : "").filter(Boolean);
+      const info = [x.kind, x.address || x.area, sharedOn() && cloud.members.length > 1 && likeIds(x.id).length ? "行きたい" + likeIds(x.id).length + "人" : "", ...dist, x.stay ? "滞在" + stayText(x.stay) : "", x.hours ? "営業" + x.hours : "", x.closed ? "定休" + x.closed : "", x.when ? "希望" + x.when : ""].filter(Boolean).join("／");
+      L.push(`${i + 1}. ${"★".repeat(x.prio)}${x.name}${info ? "（" + info + "）" : ""}${x.memo ? " " + x.memo.replace(/\s+/g, " ") : ""}`);
+    });
+    L.push("", "## お願い",
+      "- 行きたい場所を、どの日にまわすか割りふる。各日は「朝の拠点→観光→夜の拠点」で、近い場所をまとめて移動の無駄を減らす",
+      "- ★の多い場所を優先。入りきらない所は理由と一緒に最後に",
+      "- 日付ごとの営業日・定休日・最終入場をWebで確かめて、行けない日には入れない",
+      "- 1日ごとに、順番・滞在時間・移動手段と所要時間の目安。到着日と出発日は予定を軽めに",
+      "- 距離は直線距離。実際の道のりや電車の時間は調べなおす",
+      "- 最初に日割りの一覧（日／朝の拠点／回る場所／夜の拠点）、そのあと日ごとの詳細。確かめられない情報は「要確認」");
+    return L.join("\n");
+  }
+  $("plan-ask").onclick = () => { if (!dayList().length) { toast("先に旅の開始日と終了日を入れてください"); return; } presentPrompt(buildPlanPrompt(), "返事は、「保存したルート」に貼り付けて保存できます（ログイン中）。"); };
   let asking = false;
   async function ask(kind){
     if (asking) return;
@@ -1006,13 +1414,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         const ok = await getHere();
         if (!ok) toast(state.here ? `現在地が取れなかったので、${Math.round((Date.now() - state.here.at) / 60000)}分前の位置で作りました` : "現在地が取れなかったので、場所のメモをもとに作りました");
       }
-      const text = buildPrompt(kind);
-      $("pv-text").textContent = text; $("preview").hidden = false;
-      const url = "https://claude.ai/new?q=" + encodeURIComponent(text);
-      const fits = url.length <= URL_MAX;
-      $("pv-open").href = fits ? url : "https://claude.ai/new";
-      $("pv-hint").textContent = fits ? "Claudeが開いたら、入力欄に文が入っていればそのまま送信。空なら長押しで貼り付けて送信してください。" : "文が長いので、Claudeが開いたら入力欄を長押しして「ペースト」で貼り付けて送信してください（コピーは自動でします）。";
-      $("preview").scrollIntoView({ behavior: "smooth", block: "start" });
+      presentPrompt(buildPrompt(kind));
     } finally {
       btns.forEach(b => b.disabled = false); $("ask").textContent = "いまからのルートを聞く"; asking = false;
     }
@@ -1029,8 +1431,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("import-open").onclick = () => $("import-box").hidden = !$("import-box").hidden;
   $("import-do").onclick = () => {
     try { const s = JSON.parse($("import-text").value); if (!s || !Array.isArray(s.spots)) throw 0;
-      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, backupAt: Date.now() }; save();
-      s.spots.forEach(x => sync.dirty[x.id] = "up"); sync.replaceAll = true; sync.tripDirty = true; saveSync();
+      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, plan: normPlan(s.plan), backupAt: Date.now() }; save();
+      s.spots.forEach(x => sync.dirty[x.id] = "up"); sync.replaceAll = true; sync.tripDirty = true; sync.planDirty = !planEmpty(state.plan); saveSync();
       location.reload();
     } catch { $("bk-msg").textContent = "データの形がちがうようです。コピーした文をそのまま貼ってください"; }
   };
