@@ -15,7 +15,7 @@
 - 保存先：`localStorage`（キー `tabi-navi-v1`）。端末のブラウザの中だけに保存
   - 形：`{ spots: [...], here: {lat,lng,acc,at,address} | null, settings: {要素id: 値}, backupAt?: 最後にコピーした時刻, guardHideUntil?: 案内を隠す期限 }`
   - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created, lat?, lng?, by?, geoFail? }`（`address`・`lat/lng` は後から追加。古いデータにはないので空として扱う。`by`＝追加した人（クラウドから来たときだけ）、`geoFail`＝位置を調べて見つからなかった印で、手元だけ）
-  - plan（日程と拠点）：`{ start: "YYYY-MM-DD", end, days: { 日付: { am?: 基地, pm?: 基地 } } }`、基地＝`{ name, address, lat?, lng? }`。`state.plan` は旅ごと（クラウドでは `trip_plans.plan`）。入れていない日は、朝＝前の日の夜、夜＝朝と同じになる（`effBase`）。古いデータにはないので空として扱う
+  - plan（日程と拠点）：`{ start: "YYYY-MM-DD", end, days: { 日付: { am?: 基地, pm?: 基地 } }, hubs: [交通の拠点] }`、交通の拠点＝`{ id, kind: "駅"|"バス停"|"空港"|"港", name, address?, lat?, lng? }`（旅ごとの共通リスト。古いデータにはないので空として扱う）、基地＝`{ name, address, lat?, lng? }`。`state.plan` は旅ごと（クラウドでは `trip_plans.plan`）。入れていない日は、朝＝前の日の夜、夜＝朝と同じになる（`effBase`）。古いデータにはないので空として扱う
   - settings の `day-sel`（ルート提案に使う日。`auto`＝今日、旅の外なら1日目）、`start-time`（朝の出発時刻）
   - **データの形を変えるときは、古いデータも読めるようにすること**（オーナーのリストが消えないように）
 - データを守る案内（`#guard`）：iPhoneのSafariは7日間ひらかないサイトのデータを消すことがあるため、
@@ -45,6 +45,9 @@
   - 位置（`geocode`）：日本語の住所は国土地理院の住所検索（`msearch.gsi.go.jp`）、見つからない・海外は OpenStreetMap Nominatim の `search`（1秒に1回まで、順番に）。場所の保存時に裏で調べ、「位置をまとめて調べる」で再試行。位置は手で入れてもよい（`緯度, 経度`）。Googleマップの長いURLに `!3d..!4d..` や `@緯度,経度` があればそれを使う。住所を変えると調べなおす
   - 距離は直線距離（`km`＝球面の距離）。実際の道のり・電車の時間は Claude が調べる
   - 簡易地図：拠点（朝の拠点があればそれ）を中心に、北を上にして点を並べる（地図タイルなし、SVG）。輪は 1・2・5 ずつの刻み。点をタップすると名前・距離と拠点への線が出る
+- 交通の拠点（`交通の拠点（駅・バス停など）` カード）：`state.plan.hubs` に入れ、日程・拠点といっしょに `trip_plans` へ同期する（新しい表はいらない）。
+  - 手で登録（種類・名前・住所。位置は名前（駅なら「○○駅」）や住所から `geocode` で調べる）と、「近くの駅・バス停を探す」（OpenStreetMap の Overpass API。探す場所は、いまいる場所・今日の拠点・旅の宿・位置が分かる場所。はんい500m/1km/2km。同じ名前はまとめて近い順に最大15件。登録ずみは出さない）
+  - お願い文：交通の拠点があるときだけ、`## 交通の拠点（駅・バス停など）` の欄、場所ごとの「最寄りの駅：○○（約○m）」、「乗る駅・降りる駅（バス停）とのりかえを書く」の依頼を入れる。日割りプランにも同じ
 - 現在地：`navigator.geolocation`（HTTPS が必要）。住所への変換は OpenStreetMap Nominatim（失敗・4秒たっても返事がないときは緯度経度のまま続ける）
 - Claude への受け渡し：`buildPrompt(kind)` でお願い文を作る → 「コピーしてClaudeを開く」をタップ
   - タップした瞬間にクリップボードへコピーする（iOS はタップ中しかコピーできない）
