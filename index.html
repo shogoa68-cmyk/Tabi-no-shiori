@@ -360,6 +360,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 日程と拠点（古いデータにはないので、空として扱う）
   function normPlan(p){ const o = p && typeof p === "object" ? p : {}; return { start: typeof o.start === "string" ? o.start : "", end: typeof o.end === "string" ? o.end : "", days: o.days && typeof o.days === "object" ? o.days : {} }; }
   const planEmpty = p => !p.start && !p.end && !Object.keys(p.days).length;
+  // キーの並びに関係なく、中身が同じなら同じ文字になる（クラウドは並び順を入れかえて返すことがあるため）
+  function canon(v){ return JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x); }
   state.plan = normPlan(state.plan);
   if (!state.settings || typeof state.settings !== "object") state.settings = {}; // 古い・こわれたデータでも止まらないように
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} renderGuard(); };
@@ -458,8 +460,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function cloudMark(id, op){ sync.dirty[id] = op; saveSync(); scheduleSync(); }
   function cloudMarkTrip(){ sync.tripDirty = true; saveSync(); scheduleSync(); }
   function cloudMarkPlan(){ sync.planDirty = true; saveSync(); scheduleSync(); }
-  let syncTimer = null, syncPromise = null, syncAgain = false, wantTrip = null;
-  function scheduleSync(delay = 800){ clearTimeout(syncTimer); syncTimer = setTimeout(runSync, delay); }
+  let syncTimer = null, syncPromise = null, syncAgain = false, wantTrip = null, syncForce = false, followUps = 0;
+  function scheduleSync(delay = 800, followUp = false){ if (!followUp) followUps = 0; clearTimeout(syncTimer); syncTimer = setTimeout(runSync, delay); }
+  // 同期の途中で「送るもの」が新しく見つかったとき、すぐもう一度同期する（続けて2回まで。送れないものがあっても、くりかえし続けないため）
+  function followUpSync(){ if (followUps < 2) { followUps++; syncAgain = true; } }
   // 同期を1回やる。終わったら true（失敗したら false）を返す。やっている最中なら、その終わりを待つ
   function runSync(){
     if (!sb || !session) { renderCloud(); return Promise.resolve(false); }
@@ -468,7 +472,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     syncPromise = (async () => {
       try { await syncOnce(); sync.lastSync = Date.now(); saveSync(); renderCloud(); return true; }
       catch (e) { renderCloud("同期できませんでした。電波が戻ったら、もう一度送ります（" + (e.message || e) + "）"); return false; }
-      finally { syncPromise = null; if (syncAgain) { syncAgain = false; scheduleSync(0); } }
+      finally { syncPromise = null; if (syncAgain) { syncAgain = false; scheduleSync(0, true); } }
     })();
     return syncPromise;
   }
@@ -480,15 +484,12 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (error) throw error;
       sync.tripDirty = false; saveSync();
     }
-    if (sync.planDirty) { // 日程と拠点。表がまだ無いときは、この端末の中だけに保存する
-      if (cloud.planOk === false) sync.planDirty = false;
-      else {
-        const snap = JSON.stringify(state.plan);
-        const { error } = await sb.from("trip_plans").upsert({ trip_id: sync.tripId, plan: state.plan });
-        if (error) { if (featureMissing(error)) { cloud.planOk = false; sync.planDirty = false; } else throw error; }
-        else if (JSON.stringify(state.plan) === snap) sync.planDirty = false; // 送っている間に直したときは、次の同期でまた送る
-        saveSync();
-      }
+    if (sync.planDirty && cloud.planOk !== false) { // 日程と拠点。表がまだ無いときは、印を残したまま手元に置いておく（表ができたら送る）
+      const snap = canon(state.plan);
+      const { error } = await sb.from("trip_plans").upsert({ trip_id: sync.tripId, plan: state.plan });
+      if (error) { if (featureMissing(error)) cloud.planOk = false; else throw error; }
+      else if (canon(state.plan) === snap) sync.planDirty = false; // 送っている間に直したときは、次の同期でまた送る
+      saveSync();
     }
     const ups = Object.keys(sync.dirty).filter(id => sync.dirty[id] === "up").map(id => state.spots.find(x => x.id === id)).filter(Boolean);
     const dels = Object.keys(sync.dirty).filter(id => sync.dirty[id] === "del");
@@ -517,14 +518,15 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (sync.dirty[r.id] === "up" && l) return l;
       const o = fromRow(r);
       // クラウドに位置がなくて手元にあるときは、手元を残す（クラウドに位置の欄ができたら送る）
-      if (!hasPos(o) && l && hasPos(l)) { o.lat = l.lat; o.lng = l.lng; if (cloud.coords) sync.dirty[o.id] = "up"; }
+      if (!hasPos(o) && l && hasPos(l)) { o.lat = l.lat; o.lng = l.lng; if (cloud.coords) { sync.dirty[o.id] = "up"; followUpSync(); } }
       return o;
     }).filter(x => sync.dirty[x.id] !== "del");
     state.spots.forEach(x => { if (sync.dirty[x.id] === "up" && !next.some(n => n.id === x.id)) next.push(x); });
     state.spots = next;
     if (!sync.tripDirty && trip) { state.settings["trip-memo"] = trip.memo; if (document.activeElement !== $("trip-memo")) $("trip-memo").value = trip.memo; }
     const cp = await fetchPlan(sync.tripId); let planNew = false;
-    if (cp && !sync.planDirty && JSON.stringify(cp) !== JSON.stringify(state.plan)) { state.plan = cp; planNew = true; }
+    if (cp && !sync.planDirty && canon(cp) !== canon(state.plan)) { state.plan = cp; planNew = true; }
+    else if (!cp && cloud.planOk === true && !planEmpty(state.plan)) { sync.planDirty = true; followUpSync(); } // クラウドに拠点が無くて手元にあるときは、すぐ送る
     saveSync(); save(); renderSpots();
     if (planNew && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#plan-days"))) renderPlan();
   }
@@ -591,7 +593,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     }
     sync.tripId = t.id; saveSync(); save();
   }
+  // 「表がまだ無い」と判断したあとも、30秒たったら、もう一度確かめる（SQLを実行したあとに、アプリを開いたままでも気づけるように）
+  function recheckFeatures(force){
+    if (cloud.features !== false && cloud.planOk !== false && cloud.coords !== false) return;
+    if (!force && Date.now() - (cloud.checkedAt || 0) < 30000) return;
+    if (cloud.features === false) cloud.features = null;
+    if (cloud.planOk === false) cloud.planOk = null;
+    if (cloud.coords === false) cloud.coords = null;
+    cloud.checkedAt = Date.now();
+  }
   async function syncOnce(){
+    recheckFeatures(syncForce); syncForce = false;
     const uid = session.user.id;
     if (sync.userId !== uid) sync = emptySync(uid); // はじめての人・別の人
     // 古い形のidを uuid に変える（1回だけ）
@@ -809,6 +821,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     $("cloud-orphans-text").textContent = o.length ? `この端末にだけある場所が${o.length}件あります（${o.map(x => x.name).join("、")}）。ほかの端末で消した場所かもしれません。クラウドに追加しますか？` : "";
     const who = session.user.email + " でログイン中。";
     if (msg) { st.textContent = who + msg; return; }
+    if (cloud.planOk === false && (sync.planDirty || !planEmpty(state.plan))) { st.textContent = who + "日程と拠点は、まだクラウドに保存できません（003_plan_coords.sql が未実行か、反映待ちです）。表ができたら自動で送ります。"; return; }
     const n = Object.keys(sync.dirty).length + (sync.tripDirty ? 1 : 0) + (sync.planDirty ? 1 : 0);
     const t = sync.lastSync ? new Date(sync.lastSync) : null, trip = cloud.trips.find(x => x.id === sync.tripId);
     st.textContent = who + (n ? `まだ送っていない変更が${n}件あります` : t ? `クラウドに保存ずみ（${trip ? "「" + trip.title + "」・" : ""}場所 ${state.spots.length}件・${pad(t.getHours())}:${pad(t.getMinutes())}）` : "クラウドとつないでいます…");
@@ -842,7 +855,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     cloud.trips = []; cloud.members = []; cloud.likes = {}; cloud.routes = []; cloud.savedProfileFor = null; cloud.planOk = null; cloud.coords = null;
     renderCloud(); renderSpots();
   };
-  $("cloud-sync").onclick = () => scheduleSync(0);
+  $("cloud-sync").onclick = () => { syncForce = true; scheduleSync(0); };
   $("cloud-orphans-add").onclick = () => {
     sync.orphans.forEach(x => { if (!state.spots.some(y => y.id === x.id)) state.spots.push(x); sync.dirty[x.id] = "up"; });
     sync.orphans = []; saveSync(); save(); renderSpots(); scheduleSync(0);
@@ -1131,9 +1144,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     list.forEach((k, i) => { const o = document.createElement("option"); o.value = k; o.textContent = dayLabel(k, i); sel.append(o); });
     sel.value = list.includes(state.settings["day-sel"]) ? state.settings["day-sel"] : "auto";
     renderPlanNote();
+    const wasOpen = new Set([...box.querySelectorAll(":scope > details[open]")].map(d => d.dataset.date));
     box.textContent = "";
     if (!list.length) { box.append(el("p", "note", "開始日と終了日を入れると、日ごとの拠点を登録できます。")); renderDayLine(); renderSpots(); return; }
-    list.forEach(k => { const d = el("details", "rt"); d.dataset.date = k; d.append(el("summary", null, "")); const w = el("div", "stack"); w.style.gap = "12px"; w.append(slotEditor(k, "am"), slotEditor(k, "pm")); d.append(w); box.append(d); });
+    list.forEach(k => { const d = el("details", "rt"); d.dataset.date = k; d.open = wasOpen.has(k); d.append(el("summary", null, "")); const w = el("div", "stack"); w.style.gap = "12px"; w.append(slotEditor(k, "am"), slotEditor(k, "pm")); d.append(w); box.append(d); });
     refreshPlanLabels(); renderDayLine(); renderSpots();
   }
   function renderPlanNote(){

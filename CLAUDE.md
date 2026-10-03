@@ -25,7 +25,9 @@
   - 起動時に `navigator.storage.persist()` を呼ぶ
 - クラウド保存（「旅の設定・バックアップ」の中。だれにでも表示）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン。supabase-js は起動時に読みこむ（読めなくても手元保存で動く）
   - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS）、`002_share.sql`（profiles / trip_invites / spot_likes / routes ＋ 招待の関数 `preview_invite`・`join_trip`）、`003_plan_coords.sql`（spots.lat/lng、trip_plans）。002 が未実行でも場所の同期は動き、共有の欄だけ隠れる（`cloud.features`）。003 が未実行でも同じ（`cloud.coords`・`cloud.planOk`。拠点は手元だけに保存し、位置の欄がないときは toRow に lat/lng を入れない）
-  - 位置は、クラウドに無くて手元にあるときは手元を残して次の同期で送る（`pullSpots`）。拠点（plan）は `sync.planDirty` で送る→受け取る（同期の最中に直したときは次の同期でまた送る）
+  - 位置は、クラウドに無くて手元にあるときは手元を残して送る（`pullSpots`）。拠点（plan）は `sync.planDirty` で送る→受け取る（同期の最中に直したときは次の同期でまた送る）。クラウドに拠点の行が無くて手元にあるときも送る
+  - 「表・欄がまだ無い」（`cloud.features/planOk/coords` が false）という判断は、30秒たつか「いま同期する」でもう一度確かめる（`recheckFeatures`）。表が無いあいだも、拠点の「あとで送る」の印は消さない。送るものが新しく見つかったときは、すぐもう一度同期する（`followUpSync`、続けて2回まで）
+  - クラウド（jsonb）は拠点のキーの並びを入れかえて返すので、比べるときは並びに関係ない `canon()` を使う。画面を作りなおすときは、開いていた日のカードを開いたままにする
   - ログインしなくても今までどおり localStorage だけで動くこと。ページに書いてよいのは publishable key（anon key）だけ
   - 同期：localStorage が手元のコピー。変更は `cloudMark(id, "up"|"del")`／`cloudMarkTrip()` で印をつけ、`runSync()` が送る→受け取る（クラウドが正。未送信の変更だけ手元を優先）
   - 同期の帳面は localStorage `tabi-navi-sync`（userId・tripId・dirty・orphans など）。新しい場所の id は uuid。古い id はハッシュで決まった uuid に変える（端末がちがっても同じ id になる）
