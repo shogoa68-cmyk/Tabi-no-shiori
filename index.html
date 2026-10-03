@@ -226,7 +226,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <details class="card" id="hub-card">
       <summary>交通の拠点（駅・バス停など） <span class="note" id="hub-sum"></span></summary>
       <div class="stack">
-        <p class="note">ルートを考えてもらうときに使う、駅・バス停・空港・港を登録します。お願い文に入るので、Claudeが「この駅から乗る」「この駅で降りる」を考えて、ルートを組めます。</p>
+        <p class="note">ルートを考えてもらうときに使う、駅・バス停・空港・港を登録します。お願い文に入るので、Claudeが「この駅から乗る」「この駅で降りる」を考えて、ルートを組めます。自動で探せるのは駅とバス停です（空港・港は手で登録してください）。</p>
         <div class="stack" id="hub-list"></div>
         <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
           <span class="note" style="color:var(--ink);font-weight:700">近くの駅・バス停を探す</span>
@@ -1302,25 +1302,34 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     msg.textContent = ok ? "登録しました。位置は自動で調べます" : "同じものがもう登録されています";
     if (ok) { $("hub-name").value = ""; $("hub-addr").value = ""; }
   };
-  // 近くの駅・バス停（OpenStreetMap のデータ）
+  // 近くの駅・バス停（OpenStreetMap のデータ）。サーバーが混んでいて断られても、次のサーバーでやりなおす
+  const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
   async function overpass(c, radius){
-    const around = r => `(around:${r},${c.lat},${c.lng})`;
-    const q = `[out:json][timeout:15];(nwr${around(radius)}["railway"~"^(station|halt|tram_stop)$"]["name"];nwr${around(radius)}["highway"="bus_stop"]["name"];nwr${around(Math.max(radius, 1500))}["amenity"="ferry_terminal"]["name"];nwr${around(Math.max(radius, 3000))}["aeroway"="aerodrome"]["name"];);out center 80;`;
-    try {
-      const r = await fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q), { signal: AbortSignal.timeout(18000) });
-      return r.ok ? ((await r.json()).elements || []) : null;
-    } catch { return null; }
+    const a = `(around:${radius},${c.lat},${c.lng})`;
+    // 軽い問い合わせ（駅・バス停の点だけ）。空港や港は重いので、手で登録してもらう
+    const q = `[out:json][timeout:10];(node["railway"="station"]${a};node["railway"="halt"]${a};node["railway"="tram_stop"]${a};node["highway"="bus_stop"]${a};);out body 80;`;
+    let why = "";
+    for (const url of OVERPASS) {
+      try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q), signal: AbortSignal.timeout(12000) });
+        if (!r.ok) { why = `サーバーの返事：${r.status}`; continue; }
+        const j = await r.json();
+        if (j.remark && /error|timed out|out of memory/i.test(j.remark) && !(j.elements || []).length) { why = "サーバーが混んでいます"; continue; }
+        return { els: j.elements || [] };
+      } catch (e) { why = e && e.name === "TimeoutError" ? "時間切れ" : "サーバーにつながりません"; }
+    }
+    return { err: why || "原因不明" };
   }
   $("hub-find").onclick = async () => {
     const c = hubCenters().find(x => x.v === $("hub-center").value); if (!c) return;
     const msg = $("hub-find-msg"), box = $("hub-found"); box.textContent = ""; msg.textContent = "探しています…"; $("hub-find").disabled = true;
-    const els = await overpass(c.p, Number($("hub-radius").value));
+    const res = await overpass(c.p, Number($("hub-radius").value)), els = res.els;
     $("hub-find").disabled = false;
-    if (!els) { msg.textContent = "探せませんでした。電波を確認して、少し待ってからもう一度ためしてください。"; return; }
+    if (!els) { msg.textContent = `探せませんでした（${res.err}）。電波を確認して、少し待ってからもう一度ためしてください。それでもだめなときは、下の「手で登録する」から入れてください。`; return; }
     const best = new Map(), r5 = v => Math.round(v * 1e5) / 1e5;
     els.forEach(e => {
-      const t = e.tags || {}, lat = e.lat != null ? e.lat : e.center && e.center.lat, lng = e.lon != null ? e.lon : e.center && e.center.lon;
-      const kind = /^(station|halt|tram_stop)$/.test(t.railway || "") ? "駅" : t.highway === "bus_stop" ? "バス停" : t.amenity === "ferry_terminal" ? "港" : t.aeroway === "aerodrome" ? "空港" : "";
+      const t = e.tags || {}, lat = e.lat, lng = e.lon;
+      const kind = /^(station|halt|tram_stop)$/.test(t.railway || "") ? "駅" : t.highway === "bus_stop" ? "バス停" : "";
       const name = t["name:ja"] || t.name;
       if (!kind || !name || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
       const d = km(c.p, { lat, lng }), key = kind + "|" + name, cur = best.get(key);
