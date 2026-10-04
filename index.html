@@ -42,6 +42,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:var(--accent);color:var(--paper)}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .btn.small{font-size:13px;padding:6px 11px}
+.btn.ghost.on{background:var(--accent);color:#fff}
 .btn:disabled{opacity:.5}
 .link{font:inherit;font-size:13px;background:none;border:0;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline}
 .note{font-size:12.5px;color:var(--muted);margin:0}
@@ -100,6 +101,8 @@ details.card[open] > summary{margin-bottom:10px}
 .mp .sel{stroke:var(--ink);stroke-width:2.5}
 .mp .hit{fill:transparent;cursor:pointer}
 .mp .link{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 3;opacity:.6}
+.mp .scalebar{stroke:var(--ink);stroke-width:3;stroke-linecap:round}
+.mp{touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .legend i.sq{border-radius:2px}
@@ -301,6 +304,18 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   <details class="card" id="map-card" hidden>
     <summary>距離マップ <span class="note" id="map-sum"></span></summary>
     <div class="stack">
+      <div class="row" id="map-focus" hidden>
+        <button class="btn ghost small" type="button" data-focus="">全体</button>
+        <button class="btn ghost small" type="button" data-focus="am">朝の拠点まわり</button>
+        <button class="btn ghost small" type="button" data-focus="pm">夜の拠点まわり</button>
+      </div>
+      <div class="row" id="map-ctl" hidden>
+        <button class="btn ghost small" type="button" id="map-zin">拡大 ＋</button>
+        <button class="btn ghost small" type="button" id="map-zout">縮小 －</button>
+        <button class="btn ghost small" type="button" id="map-zreset">全体</button>
+        <span class="note" id="map-zlabel"></span>
+      </div>
+      <p class="note">2本の指でひらく・とじる（ピンチ）か、ボタンで拡大・縮小できます。拡大したあとは、指でなぞって動かせます（パソコンは、Ctrlを押しながらホイールでも拡大・縮小できます）。</p>
       <div id="map-box"></div>
       <div class="legend" id="map-legend"></div>
       <p class="note" id="map-info" style="color:var(--ink)"></p>
@@ -1246,8 +1261,59 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("day-select").onchange = () => { state.settings["day-sel"] = $("day-select").value; save(); renderDayLine(); renderSpots(); };
   // ---- 簡易地図（北が上。拠点を中心に、行きたい場所を本当の位置関係のまま点で並べる） ----
   let mapSel = "";
+  // 地図の見かた：z＝拡大の倍率、px/py＝動かした量（図の中の単位）。点や文字の大きさは変えず、点どうしの間隔だけ変える
+  const mapView = { z: 1, px: 0, py: 0 };
+  let mapLayout = []; // いま画面に出している点の位置（タップで選ぶときに使う）
   const SVGNS = "http://www.w3.org/2000/svg";
   const sv = (tag, attrs, text) => { const e = document.createElementNS(SVGNS, tag); Object.entries(attrs || {}).forEach(([k, v]) => e.setAttribute(k, v)); if (text != null) e.textContent = text; return e; };
+  const ZMIN = 0.3, ZMAX = 16;
+  function mapZoomAt(f, z2){ // 図の中の点 f をその場所に止めたまま、倍率を z2 にする
+    z2 = Math.min(ZMAX, Math.max(ZMIN, z2));
+    const k = z2 / mapView.z;
+    mapView.px = f.x - 180 - (f.x - 180 - mapView.px) * k; mapView.py = f.y - 180 - (f.y - 180 - mapView.py) * k; mapView.z = z2;
+  }
+  function attachMapGestures(svg){
+    const ptrs = new Map(); let tap = null, pinch = null;
+    const toSvg = e => { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left) * 360 / r.width, y: (e.clientY - r.top) * 360 / r.height }; };
+    const pair = () => { const [a, b] = [...ptrs.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, m: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }; };
+    svg.addEventListener("pointerdown", e => {
+      try { svg.setPointerCapture(e.pointerId); } catch {}
+      ptrs.set(e.pointerId, toSvg(e));
+      if (ptrs.size === 1) tap = { ...toSvg(e), moved: false, t: Date.now() }; else { tap = null; if (ptrs.size === 2) pinch = pair(); }
+    });
+    svg.addEventListener("pointermove", e => {
+      if (!ptrs.has(e.pointerId)) return;
+      const prev = ptrs.get(e.pointerId), cur = toSvg(e); ptrs.set(e.pointerId, cur);
+      if (ptrs.size === 1) {
+        if (tap && !tap.moved && Math.hypot(cur.x - tap.x, cur.y - tap.y) > 6) tap.moved = true;
+        if (tap && tap.moved) { mapView.px += cur.x - prev.x; mapView.py += cur.y - prev.y; renderMap(); }
+      } else if (ptrs.size === 2 && pinch) {
+        const now = pair();
+        mapView.px += now.m.x - pinch.m.x; mapView.py += now.m.y - pinch.m.y;
+        mapZoomAt(now.m, mapView.z * now.d / pinch.d); pinch = now; renderMap();
+      }
+    });
+    const end = e => {
+      if (!ptrs.has(e.pointerId)) return;
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = null;
+      if (ptrs.size === 0 && tap && !tap.moved && e.type === "pointerup") { // うごかさずに離した＝タップ：いちばん近い点を選ぶ（もう一度押すと、選びなおし）
+        let best = null; mapLayout.forEach(p => { const d = Math.hypot(p.x - tap.x, p.y - tap.y); if (d <= 20 && (!best || d < best.d)) best = { id: p.id, d }; });
+        mapSel = best ? (mapSel === best.id ? "" : best.id) : "";
+        renderMap();
+      }
+      if (ptrs.size === 0) tap = null;
+    };
+    svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+    // パソコン：Ctrl（Macはトラックパッドのピンチも）を押しながらホイールで拡大・縮小。ふつうのホイールは、ページのスクロールのまま
+    svg.addEventListener("wheel", e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); mapZoomAt(toSvg(e), mapView.z * Math.exp(-e.deltaY * 0.004)); renderMap(); }, { passive: false });
+  }
+  let mapFocus = ""; // ""＝全体、"am"＝朝の拠点を中心に近くをアップ、"pm"＝夜の拠点
+  document.querySelectorAll("#map-focus button").forEach(b => b.onclick = () => { mapFocus = b.dataset.focus; mapView.z = 1; mapView.px = 0; mapView.py = 0; renderMap(); });
+  const mapZoomBy = k => { mapZoomAt({ x: 180, y: 180 }, mapView.z * k); renderMap(); };
+  $("map-zin").onclick = () => mapZoomBy(1.5);
+  $("map-zout").onclick = () => mapZoomBy(1 / 1.5);
+  $("map-zreset").onclick = () => { mapView.z = 1; mapView.px = 0; mapView.py = 0; renderMap(); };
   function renderMap(){
     const card = $("map-card"), ad = activeDay(), showDone = $("show-done").checked;
     const spots = state.spots.filter(s => hasPos(s) && (showDone || !s.done));
@@ -1258,39 +1324,55 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     card.hidden = !state.spots.length && !bases.length;
     if (card.hidden) return;
     $("map-sum").textContent = spots.length ? `（${spots.length}か所）` : "";
-    const box = $("map-box"); box.textContent = "";
+    const box = $("map-box");
     $("map-note").textContent = missing ? `${missing}件は位置がまだ分かりません。「日程と拠点」の「位置をまとめて調べる」を押してください。` : "";
     const lg = $("map-legend"); lg.textContent = "";
-    if (!spots.length && !bases.length) { box.append(el("p", "note", "位置が分かっている場所がまだありません。")); $("map-info").textContent = ""; return; }
-    const c = bases[0] ? bases[0].b : { lat: spots.reduce((a, s) => a + s.lat, 0) / spots.length, lng: spots.reduce((a, s) => a + s.lng, 0) / spots.length };
+    if (!spots.length && !bases.length) { box.textContent = ""; box.append(el("p", "note", "位置が分かっている場所がまだありません。")); $("map-info").textContent = ""; $("map-ctl").hidden = true; mapLayout = []; return; }
+    $("map-ctl").hidden = false; $("map-zlabel").textContent = `いまの倍率：×${mapView.z.toFixed(mapView.z < 10 ? 1 : 0)}`;
+    const two = bases.length === 2;
+    $("map-focus").hidden = !two; if (!two) mapFocus = "";
+    document.querySelectorAll("#map-focus button").forEach(b => b.classList.toggle("on", b.dataset.focus === mapFocus));
+    const fb = two && mapFocus ? bases[mapFocus === "pm" ? 1 : 0] : null;
+    const c = fb ? fb.b : bases[0] ? bases[0].b : { lat: spots.reduce((a, s) => a + s.lat, 0) / spots.length, lng: spots.reduce((a, s) => a + s.lng, 0) / spots.length };
     const X0 = p => (p.lng - c.lng) * Math.cos(c.lat * Math.PI / 180) * 111.32, Y0 = p => (p.lat - c.lat) * 110.57;
     const items = [...bases.map(x => ({ ...x.b, kind: "base", label: x.k })), ...spots.map(s => ({ ...s, kind: "spot" }))];
-    const R = Math.max(0.3, ...items.map(p => Math.hypot(X0(p), Y0(p))));
-    const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find(v => R * 1.1 / v <= 5) || 5000;
-    const cx = 180, cy = 180, scale = 150 / (R * 1.1), X = p => cx + X0(p) * scale, Y = p => cy - Y0(p) * scale;
-    const svg = sv("svg", { viewBox: "0 0 360 360", class: "mp", role: "img", "aria-label": "拠点と行きたい場所の位置関係の図（北が上）" });
-    svg.append(sv("line", { x1: cx, y1: 10, x2: cx, y2: 350, class: "axis" }), sv("line", { x1: 10, y1: cy, x2: 350, y2: cy, class: "axis" }));
-    for (let r = step; r <= R * 1.1 + 1e-9; r += step) {
-      svg.append(sv("circle", { cx, cy, r: r * scale, class: "ring" }), sv("text", { x: cx + 3, y: cy - r * scale - 2, class: "rl" }, r < 1 ? `${Math.round(r * 1000)}m` : `${r}km`));
+    const dist0 = p => Math.hypot(X0(p), Y0(p));
+    // まわりを見るとき：その拠点にいちばん近い場所（6か所まで）が入る広さにする
+    const R = fb ? Math.max(0.3, ...spots.map(dist0).sort((a, b) => a - b).slice(0, 6)) : Math.max(0.3, ...items.map(dist0));
+    const cx = 180 + mapView.px, cy = 180 + mapView.py, S = 150 / (R * 1.1) * mapView.z, X = p => cx + X0(p) * S, Y = p => cy - Y0(p) * S;
+    let svg = box.querySelector("svg.mp");
+    if (!svg) { box.textContent = ""; svg = sv("svg", { viewBox: "0 0 360 360", class: "mp", role: "img", "aria-label": "拠点と行きたい場所の位置関係の図（北が上）。拡大・縮小ができます" }); attachMapGestures(svg); box.append(svg); }
+    svg.style.touchAction = mapView.z > 1.001 ? "none" : "pan-y"; // 拡大しているときは、指で図を動かせる（ページは動かない）
+    svg.textContent = "";
+    // 距離の輪（拠点を中心に。いま見えている広さに合わせて、刻みを変える）
+    const farPx = Math.hypot(Math.max(Math.abs(cx), Math.abs(360 - cx)), Math.max(Math.abs(cy), Math.abs(360 - cy)));
+    const viewKm = farPx / S;
+    const step = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000].find(v => viewKm / v <= 6) || 10000;
+    const lab = r => r < 1 ? `${Math.round(r * 1000)}m` : `${Math.round(r * 100) / 100}km`;
+    svg.append(sv("line", { x1: cx, y1: 0, x2: cx, y2: 360, class: "axis" }), sv("line", { x1: 0, y1: cy, x2: 360, y2: cy, class: "axis" }));
+    for (let r = step, i = 0; r * S <= farPx + 1 && i < 12; r += step, i++) {
+      svg.append(sv("circle", { cx, cy, r: r * S, class: "ring" }), sv("text", { x: cx + 3, y: cy - r * S - 2, class: "rl" }, lab(r)));
     }
-    svg.append(sv("text", { x: cx + 4, y: 16, class: "rl" }, "北"));
-    const many = spots.length > 12;
-    const place = (p, x, y, text) => { svg.append(sv("text", { x: x > 250 ? x - 10 : x + 10, y: y + 4, "text-anchor": x > 250 ? "end" : "start" }, text)); };
-    if (mapSel) { const t = spots.find(s => s.id === mapSel); if (t) bases.forEach(b => svg.append(sv("line", { x1: X(b.b), y1: Y(b.b), x2: X(t), y2: Y(t), class: "link" }))); }
+    svg.append(sv("text", { x: 338, y: 18, class: "rl" }, "北↑"));
+    // ものさし（左下）
+    if (step * S <= 240) { svg.append(sv("line", { x1: 14, y1: 344, x2: 14 + step * S, y2: 344, class: "scalebar" }), sv("text", { x: 14, y: 336, class: "rl" }, lab(step))); }
+    const many = spots.length > 12; mapLayout = [];
+    const place = (x, y, text) => svg.append(sv("text", { x: x > 250 ? x - 10 : x + 10, y: y + 4, "text-anchor": x > 250 ? "end" : "start" }, text));
+    const selSpot = spots.find(s => s.id === mapSel);
+    if (selSpot) bases.forEach(b => svg.append(sv("line", { x1: X(b.b), y1: Y(b.b), x2: X(selSpot), y2: Y(selSpot), class: "link" })));
     items.filter(p => p.kind === "spot").forEach(p => {
-      const x = X(p), y = Y(p), g = sv("g", {});
-      g.append(sv("circle", { cx: x, cy: y, r: p.id === mapSel ? 8 : 6, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}` }));
-      if (!many || p.prio === 3 || p.id === mapSel) place(p, x, y, p.name.length > 9 ? p.name.slice(0, 9) + "…" : p.name);
-      const hit = sv("circle", { cx: x, cy: y, r: 16, class: "hit" }); hit.onclick = () => { mapSel = mapSel === p.id ? "" : p.id; renderMap(); };
-      g.append(hit); svg.append(g);
+      const x = X(p), y = Y(p); if (x < -20 || x > 380 || y < -20 || y > 380) return;
+      mapLayout.push({ id: p.id, x, y });
+      svg.append(sv("circle", { cx: x, cy: y, r: p.id === mapSel ? 8 : 6, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}` }));
+      if (!many || p.prio === 3 || p.id === mapSel || mapView.z >= 3) place(x, y, p.name.length > 9 ? p.name.slice(0, 9) + "…" : p.name);
+      svg.append(sv("circle", { cx: x, cy: y, r: 16, class: "hit" }));
     });
-    items.filter(p => p.kind === "base").forEach(p => { const x = X(p), y = Y(p); svg.append(sv("rect", { x: x - 7, y: y - 7, width: 14, height: 14, rx: 2, class: "base" })); place(p, x, y - 10, p.label); });
-    box.append(svg);
+    items.filter(p => p.kind === "base").forEach(p => { const x = X(p), y = Y(p); svg.append(sv("rect", { x: x - 7, y: y - 7, width: 14, height: 14, rx: 2, class: "base" })); place(x, y - 10, p.label); });
     const lgi = (cls, t) => { const sp = el("span"); sp.append(el("i", cls)); sp.append(document.createTextNode(t)); lg.append(sp); };
     lgi("sq", "拠点"); [3, 2, 1].forEach(n => { const sp = el("span"); const i = el("i"); i.style.background = n === 3 ? "var(--star)" : n === 2 ? "var(--accent)" : "var(--muted)"; sp.append(i, document.createTextNode("★".repeat(n))); lg.append(sp); });
     lg.querySelector("i.sq").style.background = "var(--ink)";
-    const t = spots.find(s => s.id === mapSel);
-    $("map-info").textContent = t ? `${t.name}（${"★".repeat(t.prio)}）：${distText(t, ad) || "拠点が未登録です"}（直線距離）` : (bases[0] ? `輪は拠点からの直線距離（${step < 1 ? Math.round(step * 1000) + "m" : step + "km"}ごと）。点をタップすると名前と距離が出ます。` : "拠点が未登録なので、行きたい場所の中心を基準にしています。「日程と拠点」で拠点を入れてください。");
+    const outN = fb ? spots.filter(p => { const x = X(p), y = Y(p); return x < -20 || x > 380 || y < -20 || y > 380; }).length : 0;
+    $("map-info").textContent = selSpot ? `${selSpot.name}（${"★".repeat(selSpot.prio)}）：${distText(selSpot, ad) || "拠点が未登録です"}（直線距離）` : (bases[0] ? `輪は${fb ? fb.k + "の" : ""}拠点からの直線距離（いまは${lab(step)}ごと）。点をタップすると名前と距離が出ます。${outN ? `図の外の${outN}か所は「全体」か縮小で見られます。` : ""}` : "拠点が未登録なので、行きたい場所の中心を基準にしています。「日程と拠点」で拠点を入れてください。");
   }
   // ---- 交通の拠点（駅・バス停・空港・港）：旅ごとの共通リスト。日程と同じ入れ物（state.plan.hubs）に入れて、いっしょに同期する ----
   const hubs = () => state.plan.hubs;
