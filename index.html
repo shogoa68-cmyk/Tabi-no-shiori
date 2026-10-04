@@ -98,6 +98,7 @@ details.card[open] > summary{margin-bottom:10px}
 .mp text.rl{fill:var(--muted)}
 .mp .p3{fill:var(--star)}.mp .p2{fill:var(--accent)}.mp .p1{fill:var(--muted)}
 .mp .base{fill:var(--ink)}
+.mp .far{opacity:.3}
 .mp .sel{stroke:var(--ink);stroke-width:2.5}
 .mp .hit{fill:transparent;cursor:pointer}
 .mp .link{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 3;opacity:.6}
@@ -179,7 +180,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <label>天気
         <select id="weather"><option value="">わからない</option><option>晴れ</option><option>くもり</option><option>雨</option></select></label>
       <label>人数<input id="people" type="number" min="1" max="30" value="1"></label>
+      <label>拠点から近い場所だけ
+        <select id="radius"><option value="">しぼらない</option><option value="1">1km以内</option><option value="2">2km以内</option><option value="3">3km以内</option><option value="5">5km以内</option><option value="10">10km以内</option><option value="20">20km以内</option><option value="50">50km以内</option></select></label>
     </div>
+    <p class="note" id="radius-note"></p>
   </section>
 
   <!-- 行きたい場所 -->
@@ -417,8 +421,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 「このデータは消さないで」とブラウザにお願いする（できる端末だけ）
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch {}
 
-  const SETTING_IDS = ["start-time","end-time","end-place","mode","energy","weather","people","here-memo","trip-memo"];
-  SETTING_IDS.forEach(id => { if (state.settings[id] != null) $(id).value = state.settings[id]; $(id).addEventListener("change", () => { state.settings[id] = $(id).value; save(); if (id === "trip-memo") cloudMarkTrip(); }); });
+  const SETTING_IDS = ["start-time","end-time","end-place","mode","energy","weather","people","radius","here-memo","trip-memo"];
+  SETTING_IDS.forEach(id => { if (state.settings[id] != null) $(id).value = state.settings[id]; $(id).addEventListener("change", () => { state.settings[id] = $(id).value; save(); if (id === "radius") renderSpots(); if (id === "trip-memo") cloudMarkTrip(); }); });
   if (state.settings["allow-new"] != null) $("allow-new").checked = state.settings["allow-new"];
   $("allow-new").onchange = () => { state.settings["allow-new"] = $("allow-new").checked; save(); };
 
@@ -972,7 +976,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const stayText = m => !m ? "" : m >= 60 ? `${m/60}時間` : `${m}分`;
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
-  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); }
+  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); }
   function renderSpotList(){
     const box = $("spots"); box.textContent = "";
     const showDone = $("show-done").checked;
@@ -1057,6 +1061,18 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (hasBase(ad.am) && hasPos(ad.am)) out.push({ label: ad.same || !hasBase(ad.pm) ? "拠点" : "朝の拠点", km: km(s, ad.am) });
     if (!ad.same && hasBase(ad.pm) && hasPos(ad.pm)) out.push({ label: hasBase(ad.am) ? "夜の拠点" : "拠点", km: km(s, ad.pm) });
     return out;
+  }
+  // 拠点から○km以内に絞る：朝・夜のどちらかの拠点が範囲に入れば対象。位置が分からない場所・拠点が未登録のときは、絞らずに対象にする
+  const radiusKm = () => Number(state.settings.radius) || 0;
+  function inRadius(s, ad){
+    const r = radiusKm(); if (!r) return true;
+    ad = ad || activeDay(); const d = distInfo(s, ad);
+    return !d.length || d.some(x => x.km <= r);
+  }
+  function renderRadiusNote(){
+    const r = radiusKm(), ad = activeDay(), todo = state.spots.filter(s => !s.done);
+    const out = r ? todo.filter(s => !inRadius(s, ad)) : [];
+    $("radius-note").textContent = !r ? "" : !(ad && (hasBase(ad.am) || hasBase(ad.pm)) && todo.some(hasPos)) ? "絞り込みには、拠点と、場所の位置が必要です（「日程と拠点」で入れてください）。" : `ルートの提案に入れるのは${todo.length - out.length}か所。拠点から${r}kmより遠い${out.length}か所は外します。位置が分からない場所は入れます。`;
   }
   const distText = (s, ad) => distInfo(s, ad).map(x => `${x.label}から${fmtKm(x.km)}`).join("／");
   // ---- 位置（住所から調べる：日本は国土地理院、それ以外・見つからないときは OpenStreetMap） ----
@@ -1363,7 +1379,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     items.filter(p => p.kind === "spot").forEach(p => {
       const x = X(p), y = Y(p); if (x < -20 || x > 380 || y < -20 || y > 380) return;
       mapLayout.push({ id: p.id, x, y });
-      svg.append(sv("circle", { cx: x, cy: y, r: p.id === mapSel ? 8 : 6, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}` }));
+      svg.append(sv("circle", { cx: x, cy: y, r: p.id === mapSel ? 8 : 6, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}${inRadius(p, ad) ? "" : " far"}` }));
       if (!many || p.prio === 3 || p.id === mapSel || mapView.z >= 3) place(x, y, p.name.length > 9 ? p.name.slice(0, 9) + "…" : p.name);
       svg.append(sv("circle", { cx: x, cy: y, r: 16, class: "hit" }));
     });
@@ -1682,8 +1698,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (hubs().length) { L.push("## 交通の拠点（駅・バス停など）"); hubs().forEach(h => { const d = distText(h, ad); L.push(`- ${h.kind}：${h.name}${h.address ? "（" + h.address + "）" : ""}${d ? "　" + d : ""}`); }); L.push(""); }
     const mealLines = ad ? MEALS.filter(([key]) => hasMeal(ad.meals[key])).map(([key, label]) => `- ${label}：${mealText(ad.meals[key])}`) : [];
     if (mealLines.length) L.push("## 今日の食事の希望", ...mealLines, "");
-    const todo = sorted().filter(s => !s.done), done = state.spots.filter(s => s.done);
-    L.push("## 行きたい場所（上ほど優先）");
+    const open = sorted().filter(s => !s.done), done = state.spots.filter(s => s.done);
+    const todo = open.filter(s => inRadius(s, ad)), far = open.filter(s => !inRadius(s, ad));
+    L.push(`## 行きたい場所（上ほど優先${radiusKm() ? `。拠点から${radiusKm()}km以内に絞った` : ""}）`);
     if (!todo.length) L.push("- なし");
     todo.forEach((s, i) => {
       const info = [s.kind, s.address || s.area, sharedOn() && cloud.members.length > 1 && likeIds(s.id).length ? "行きたい" + likeIds(s.id).length + "人" : "", ...distInfo(s, ad).map(x => `${x.label}から${fmtKm(x.km)}`), ...(nearestHub(s) ? [`最寄りの${nearestHub(s).h.kind}：${nearestHub(s).h.name}（${fmtKm(nearestHub(s).d)}）`] : []), s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
@@ -1691,6 +1708,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const map = s.map && !s.address && s.map.length <= 80 ? " " + s.map : "";
       L.push(`${i+1}. ${"★".repeat(s.prio)}${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " " + s.memo.replace(/\s+/g, " ") : ""}${map}`);
     });
+    if (far.length) L.push(`- 遠いので今回は外した：${far.slice(0, 8).map(s => s.name).join("、")}${far.length > 8 ? `ほか${far.length - 8}か所` : ""}（拠点から${radiusKm()}km超。入れる必要はない）`);
     if (done.length) L.push(`- 行った：${done.map(s => s.name).join("、")}`);
     L.push("");
     L.push("## お願い");
@@ -1698,6 +1716,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     L.push(
       `- 今日（${WD[d.getDay()]}）の営業時間・定休日と、移動の経路・時間をWebで確かめる`,
       "- 終わりの時刻までに回れる順番を決める。★の多い所を優先し、入らない所は理由を最後に",
+      "- 時間が足りず無理が出るときは、ごまかさず正直に伝える。詰め込まず、どこが無理か（移動・営業時間・食事・体力）と、外す場所や代わりの案を書く",
       "- ごはん・休けいも入れる。" + ($("allow-new").checked ? "近くの良い所は「おすすめ」として足してOK" : "リストにない場所は、ごはん・休けい以外入れない"),
       ...(todo.some(x => distInfo(x, ad).length || nearestHub(x)) ? [`- ${hubs().length ? "拠点や交通の拠点" : "拠点"}からの距離は直線距離。実際の道のりや電車の時間は調べなおす`] : []),
       ...(hubs().length ? ["- 登録した交通の拠点（駅・バス停など）を乗り降りの起点にして、乗る駅・降りる駅（バス停）とのりかえを書く"] : []),
@@ -1749,6 +1768,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     L.push("", "## お願い",
       "- 行きたい場所を、どの日にまわすか割りふる。各日は「朝の拠点→観光→夜の拠点」で、近い場所をまとめて移動の無駄を減らす",
       "- ★の多い場所を優先。入りきらない所は理由と一緒に最後に",
+      "- どの日も時間が足りず無理が出るなら、正直に伝える。詰め込まず、その日の無理な点と、他の日に回す案を書く",
       "- 日付ごとの営業日・定休日・最終入場をWebで確かめて、行けない日には入れない",
       "- 1日ごとに、順番・滞在時間・移動手段と所要時間の目安。到着日と出発日は予定を軽めに",
       "- 距離は直線距離。実際の道のりや電車の時間は調べなおす",
