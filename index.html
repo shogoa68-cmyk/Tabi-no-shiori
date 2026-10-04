@@ -44,6 +44,22 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:var(--accent);color:var(--paper)}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .btn.small{font-size:13px;padding:6px 11px}
+.seg{display:flex;gap:4px;background:var(--line);border-radius:14px;padding:4px}
+.seg button{flex:1;font:inherit;font-size:14px;font-weight:700;border:0;background:transparent;color:var(--muted);border-radius:11px;padding:9px 6px;cursor:pointer}
+.seg button[aria-selected=true]{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!important}
+#main-sec>#trip-card{order:-5}#main-sec>#steps{order:-4}#main-sec>#qa-card{order:-3}#main-sec>#board-card{order:-2}
+#main-sec>#spots-head{order:1}#main-sec>#spots-note{order:2}#main-sec>#spots{order:3}#main-sec>#plan-card{order:4}#main-sec>#hub-card{order:5}#main-sec>#add-box{order:6}
+.steps{display:flex;gap:6px}
+.steps button{flex:1;font:inherit;text-align:left;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:7px 9px;cursor:pointer;line-height:1.3}
+.steps button b{display:flex;align-items:center;gap:6px;font-family:var(--display);font-size:13px}
+.steps button b i{font-style:normal;width:20px;height:20px;border-radius:50%;background:var(--line);color:var(--ink);display:grid;place-items:center;font-size:12px}
+.steps button small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.steps button.cur{border-color:var(--accent);background:var(--accent-soft)}
+.steps button.cur b i{background:var(--accent);color:#fff}
+.steps button.ok b i{background:var(--accent);color:#fff}
+.qa{border:2px solid var(--accent)}
+.todo{display:inline-block;margin:2px 4px 0 0;padding:0 8px;border-radius:99px;border:1px dashed var(--star);color:var(--star);font-size:11.5px;line-height:1.6}
 #board-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:none}
 #board-tabs::-webkit-scrollbar{display:none}
 .dtab{flex:none;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);border-radius:14px;padding:6px 12px;font:inherit;font-size:13px;line-height:1.3;text-align:center;cursor:pointer}
@@ -182,8 +198,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 <div class="wrap">
   <header class="stack" style="gap:4px">
     <div class="eyebrow">いまから旅ナビ</div>
-    <h1 style="font-size:24px">ここから、どこへ行こう？</h1>
+    <h1 style="font-size:24px" id="h-title">旅の計画をつくろう</h1>
+    <p class="note" id="h-sub" style="margin:0">行きたい場所を集めて、日ごとに並べます。くわしいことは、あとで。</p>
   </header>
+  <div class="seg" id="mode-seg" role="tablist" aria-label="画面の切りかえ">
+    <button type="button" role="tab" data-mode="plan">計画する</button>
+    <button type="button" role="tab" data-mode="now">いま使う（旅の途中）</button>
+  </div>
 
   <!-- 旅への招待 -->
   <section class="card stack guard" id="join-card" hidden aria-labelledby="h-join">
@@ -209,7 +230,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 
   <!-- いま -->
-  <section class="card now" aria-label="いまの状況">
+  <section class="card now only-now" aria-label="いまの状況">
     <div class="clock"><span class="t" id="clock">--:--</span><span class="d" id="date"></span></div>
     <div class="note" id="day-line" hidden style="color:var(--ink)"></div>
     <div class="here">
@@ -242,9 +263,23 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 
   <!-- 行きたい場所 -->
-  <section class="stack" aria-labelledby="h-spots">
-    <div class="row" style="justify-content:space-between">
-      <h2 id="h-spots">行きたい場所 <span class="note" id="count"></span></h2>
+  <section class="stack" aria-labelledby="h-spots" id="main-sec">
+    <nav class="steps only-plan" id="steps" aria-label="進めかた"></nav>
+    <section class="card stack qa only-plan" id="qa-card" aria-labelledby="h-qa">
+      <h2 id="h-qa" style="font-size:17px">1　行きたい場所を集める</h2>
+      <p class="note" style="margin:0">Googleマップで場所を開き、「共有」でコピーしたリンクを貼るだけ。名前や住所は自動で入ります。まとめて入れたいときは、1つずつ続けて貼ってください。</p>
+      <div class="row" style="flex-wrap:nowrap">
+        <input id="qa-url" placeholder="リンクか名前を貼る" aria-label="Googleマップのリンクか場所の名前" style="flex:1;min-width:0" inputmode="url">
+        <button class="btn" type="button" id="qa-add">追加</button>
+      </div>
+      <div class="stack" id="qa-name-box" hidden style="gap:6px">
+        <label>名前が読めませんでした。名前を入れてください<input id="qa-name" maxlength="60" placeholder="例：伏見稲荷大社"></label>
+        <button class="btn small" type="button" id="qa-name-ok" style="align-self:flex-start">この名前で追加</button>
+      </div>
+      <span class="msg" id="qa-msg" style="color:var(--accent)"></span>
+    </section>
+    <div class="row" style="justify-content:space-between" id="spots-head">
+      <h2 id="h-spots">行きたい場所のリスト <span class="note" id="count"></span></h2>
       <label class="row" style="flex-direction:row;gap:6px;font-size:13px"><input type="checkbox" id="show-done" style="width:auto"> 行った所も表示</label>
     </div>
     <section class="card stack" id="trip-card" hidden aria-label="旅の切りかえ" style="gap:8px">
@@ -268,13 +303,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <p class="note" id="trip-note"></p>
     </section>
     <details class="card" id="plan-card">
-      <summary>日程と拠点（宿） <span class="note" id="plan-sum"></span></summary>
+      <summary>3　日ごとの詳細（拠点・外せない移動・食事） <span class="note" id="plan-sum"></span></summary>
       <div class="stack">
-        <p class="note">旅の日付を入れて、日ごとに拠点（宿・駅・空港など）を登録します。朝と夜で拠点が別のときは、両方入れてください。入れなかった日は、前の日の夜の拠点（なければ朝の拠点）と同じになります。</p>
-        <div class="grid">
-          <label>旅の開始日<input type="date" id="plan-start"></label>
-          <label>旅の終了日<input type="date" id="plan-end"></label>
-        </div>
+        <p class="note">日ごとに、拠点（宿・駅・空港など）、絶対に外せない移動（新幹線・飛行機）、食事の希望を、わかるところから入れます。旅の日付は「2　日ごとに割りふる」の中で入れます。朝と夜で拠点が別のときは、両方入れてください。入れなかった日は、前の日の夜の拠点（なければ朝の拠点）と同じになります。</p>
         <label>ルートの提案に使う日<select id="day-select"></select></label>
         <div class="stack" id="plan-days"></div>
         <div class="row">
@@ -285,13 +316,15 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <p class="note" id="plan-note"></p>
       </div>
     </details>
-    <details class="card" id="board-card">
-      <summary>日ごとの予定を組む（ドラッグ） <span class="note" id="board-sum"></span></summary>
-      <div class="stack">
-        <p class="note">下の「登録リスト」のカードを、上の枠（午前・午後・夜）へ指で引っぱって入れます。入れたカードは「≡」で動かせます。日付のタブの上で少し止めると、別の日に切りかわります。入れた順番が、お願い文に入ります。外すときは、リストに戻すか「×」。拠点・移動・食事は「日程と拠点」で入れます。</p>
-        <div id="board"></div>
+    <section class="card stack only-plan" id="board-card" aria-labelledby="h-board">
+      <h2 id="h-board" style="font-size:17px">2　日ごとに割りふる <span class="note" id="board-sum"></span></h2>
+      <div class="grid" id="dates-box">
+        <label>旅の開始日<input type="date" id="plan-start"></label>
+        <label>旅の終了日<input type="date" id="plan-end"></label>
       </div>
-    </details>
+      <p class="note" style="margin:0">下の「登録リスト」のカードを、上の枠（午前・午後・夜）へ指で引っぱって入れます。入れたカードは「≡」で動かせます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
+      <div id="board"></div>
+    </section>
     <details class="card" id="hub-card">
       <summary>交通の拠点（駅・バス停など） <span class="note" id="hub-sum"></span></summary>
       <div class="stack">
@@ -326,10 +359,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         </div>
       </div>
     </details>
+    <p class="note only-plan" id="spots-note" style="margin:0">営業時間・滞在時間・メモなどの詳細は、あとで「編集」から入れられます。まだ入っていない項目は、カードに印が出ます。</p>
     <div class="spots" id="spots"></div>
 
     <details class="card" id="add-box">
-      <summary id="add-title">場所を追加</summary>
+      <summary id="add-title">場所を詳しく入れる・編集する</summary>
       <form id="spot-form" class="stack">
         <div class="stack" style="gap:6px">
           <label>GoogleマップのURL<input id="s-map" type="url" maxlength="2000" placeholder="共有でコピーしたリンクを貼る"></label>
@@ -446,7 +480,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 </div>
 
-<div class="dock">
+<div class="dock only-now">
   <div class="in">
     <div class="quick" id="quick">
       <button type="button" data-q="day">1日の予定を組む</button>
@@ -1044,7 +1078,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const stayText = m => !m ? "" : m >= 60 ? `${m/60}時間` : `${m}分`;
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
-  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); }
+  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); }
   function renderSpotList(){
     const box = $("spots"); box.textContent = "";
     const showDone = $("show-done").checked;
@@ -1063,6 +1097,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (meta) body.append(el("div","meta", meta));
       if (s.memo) body.append(el("div","meta", s.memo));
       const dt = distText(s); if (dt) body.append(el("div","meta", dt + "（直線）"));
+      const miss = [!s.address ? "住所" : "", !s.hours ? "営業時間" : "", !s.stay ? "滞在時間" : ""].filter(Boolean);
+      if (miss.length) { const td = el("div", "only-plan"); miss.forEach(m => td.append(el("span", "todo", m + "なし"))); body.append(td); }
       if (session && cloud.members.length > 1 && s.by) body.append(el("div","meta","追加：" + nameOf(s.by)));
       if (sharedOn()) {
         const ids = likeIds(s.id), row = el("div","likes");
@@ -1846,7 +1882,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function resetForm(){
     editing = null; editOrigLL = ""; $("spot-form").reset(); $("s-kind").value = "観光";
     prio = 2; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c.dataset.p === "2" ? "true" : "false"));
-    $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を追加";
+    $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を詳しく入れる・編集する";
   }
   function startEdit(id){
     const s = state.spots.find(x => x.id === id); if (!s) return;
@@ -1938,7 +1974,69 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   $("s-load").onclick = loadFromMap;
   $("s-map").addEventListener("paste", () => setTimeout(() => { if (!$("s-name").value.trim()) loadFromMap(); }, 0));
+
+  // ---------- 計画する／いま使う の切りかえ ----------
+  function curMode(){
+    const m = state.settings["ui-mode"];
+    if (m === "plan" || m === "now") return m;
+    const t = dkey(new Date()); return dayList().includes(t) ? "now" : "plan"; // 旅の期間中なら「いま」、それ以外は「計画」
+  }
+  function applyMode(){
+    const q = new URLSearchParams(location.search).get("mode"); // ?mode=now で「いま」画面を開く（ホーム画面のショートカット用）
+    if ((q === "now" || q === "plan") && state.settings["ui-mode"] !== q) { state.settings["ui-mode"] = q; save(); }
+    const m = curMode(); document.body.dataset.mode = m;
+    document.querySelectorAll("#mode-seg button").forEach(b => b.setAttribute("aria-selected", b.dataset.mode === m ? "true" : "false"));
+    $("h-title").textContent = m === "plan" ? "旅の計画をつくろう" : "ここから、どこへ行こう？";
+    $("h-sub").hidden = m !== "plan";
+  }
+  document.querySelectorAll("#mode-seg button").forEach(b => b.onclick = () => { state.settings["ui-mode"] = b.dataset.mode; save(); applyMode(); renderBoard(); scrollTo(0, 0); });
+  // 手順の帯：1 集める → 2 割りふる → 3 くわしく
+  function renderSteps(){
+    const box = $("steps"); if (!box) return; box.textContent = "";
+    const open = state.spots.filter(s => !s.done), n = open.length, placed = open.filter(s => whereIs(s.id)).length;
+    const thin = open.filter(s => !s.address || !s.hours).length;
+    const cur = !n ? 1 : placed < n ? 2 : 3;
+    const mk = (no, title, sub, target) => { const b = el("button"); b.type = "button"; b.className = (cur === no ? "cur" : cur > no ? "ok" : ""); const t = el("b"); t.append(el("i", null, String(no)), document.createTextNode(title)); b.append(t, el("small", null, sub)); b.onclick = () => { const e = $(target); if (e) e.scrollIntoView({ behavior: "smooth", block: "start" }); if (e && e.tagName === "DETAILS") e.open = true; }; box.append(b); };
+    mk(1, "集める", n ? `${n}か所` : "まだ0か所", "qa-card");
+    mk(2, "割りふる", n ? `${placed}/${n}か所` : "-", "board-card");
+    mk(3, "くわしく", thin ? `未入力 ${thin}件` : n ? "そろった" : "-", "plan-card");
+  }
+  // ---------- かんたん追加：リンクを貼るだけ ----------
+  let qaPending = null;
+  function addSpotQuick(v){
+    const id = newId();
+    const t = { id, name: v.name, prio: 2, area: v.area || "", address: v.address || "", stay: null, hours: "", closed: "", kind: "観光", when: "", map: v.map || "", memo: "", done: false, created: Date.now() };
+    if (hasPos(v)) { t.lat = v.lat; t.lng = v.lng; }
+    state.spots.push(t); cloudMark(id, "up"); save(); renderSpots();
+    if (!hasPos(t)) locate(id); // 住所から位置を調べる（裏で）
+    return t;
+  }
+  async function quickAdd(){
+    const raw = $("qa-url").value.trim(), msg = $("qa-msg"); if (!raw) { msg.textContent = "リンクか名前を入れてください"; return; }
+    $("qa-add").disabled = true; msg.textContent = "読みこみ中…";
+    const u = (raw.match(/https?:\/\/\S+/) || [""])[0];
+    let info = null, map = "";
+    if (u) {
+      info = await mapInfoFromUrl(raw); map = u;
+      if (info && !isShort(u)) { try { const c = new URL(u); [...c.searchParams.keys()].forEach(k => { if (!["q","query","api","ftid","cid"].includes(k)) c.searchParams.delete(k); }); map = c.toString(); } catch {} }
+    } else info = { name: raw };
+    $("qa-add").disabled = false;
+    if (!info || !info.name) { qaPending = Object.assign({}, info || {}, { map }); $("qa-name-box").hidden = false; $("qa-name").focus(); msg.textContent = u ? (info ? "リンクは読めましたが、名前がありません。" : "このリンクは読めませんでした。名前を入れると、リンクつきで追加します。") : ""; return; }
+    const t = addSpotQuick(Object.assign({}, info, { map }));
+    $("qa-url").value = ""; $("qa-name-box").hidden = true; qaPending = null;
+    msg.textContent = `「${t.name}」を追加しました。下の登録リストから、日ごとの枠へ入れられます。`;
+    $("qa-url").focus();
+  }
+  $("qa-add").onclick = quickAdd;
+  $("qa-url").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); quickAdd(); } });
+  $("qa-url").addEventListener("paste", () => setTimeout(() => { if (/https?:\/\//.test($("qa-url").value)) quickAdd(); }, 0));
+  $("qa-name-ok").onclick = () => {
+    const nm = $("qa-name").value.trim(); if (!nm) { $("qa-msg").textContent = "名前を入れてください"; return; }
+    const t = addSpotQuick(Object.assign({}, qaPending || {}, { name: nm }));
+    $("qa-name").value = ""; $("qa-url").value = ""; $("qa-name-box").hidden = true; qaPending = null; $("qa-msg").textContent = `「${t.name}」を追加しました。`;
+  };
   renderPlan();
+  applyMode();
 
   // ---------- Claude へのお願い文を作る ----------
   const SITUATION = {
