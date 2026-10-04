@@ -95,7 +95,11 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 .dchip.p3{border-left-color:var(--star)}.dchip.p2{border-left-color:var(--accent)}
 .dchip .nm{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}
 .dchip .sub{display:block;font-size:11.5px;font-weight:400;color:var(--muted)}
-.dchip .hd{flex:none;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;padding:8px 6px;margin:-8px 0;font-weight:700;font-size:18px;color:var(--muted)}
+.dchip,#board{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.dchip .hd{flex:none;align-self:stretch;width:38px;margin:-7px 0;border-radius:8px;background:var(--bg);display:grid;place-items:center;touch-action:none;cursor:grab}
+.dchip .hd::before{content:"";width:14px;height:24px;background-image:radial-gradient(var(--muted) 1.6px,transparent 1.8px);background-size:7px 8px;background-position:center}
+.dchip .hd:active{background:var(--accent-soft)}
+#board-tray .dchip>.hd{margin:-7px 0 -7px -4px;width:32px}
 .dchip.pl .no::before{counter-increment:n;content:counter(n)}
 .dchip .no{flex:none;width:22px;height:22px;border-radius:50%;background:var(--bar,var(--ink));color:#fff;font-size:12px;display:grid;place-items:center;font-weight:700}
 .dchip.lifting{opacity:.25}
@@ -109,7 +113,7 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 #board-tray label{white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:4px;font-size:12px}
 #board-tray .strip{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:none}
 #board-tray .strip::-webkit-scrollbar{display:none}
-#board-tray .dchip{flex:none;width:136px;touch-action:pan-x;cursor:grab;align-items:flex-start;font-size:13px}
+#board-tray .dchip{flex:none;width:150px;touch-action:pan-x;align-items:stretch;font-size:13px}
 #board-tray .dchip.used{background:var(--bg)}
 #board-tray .dchip.used .nm{opacity:.55}
 #board-tray .dchip .tag{display:inline-block;margin-top:2px;padding:0 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700}
@@ -322,7 +326,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <label>旅の開始日<input type="date" id="plan-start"></label>
         <label>旅の終了日<input type="date" id="plan-end"></label>
       </div>
-      <p class="note" style="margin:0">下の「登録リスト」のカードを、上の枠（午前・午後・夜）へ指で引っぱって入れます。入れたカードは「≡」で動かせます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
+      <p class="note" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）へ動かして入れます。入れたカードも、点々をつかんで動かせます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
       <div id="board"></div>
     </section>
     <details class="card" id="hub-card">
@@ -1374,22 +1378,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const legKm = (a, b) => hasPos(a) && hasPos(b) ? fmtKm(km(a, b)) : "";
   function chipFor(s, opt){
     const c = el("div", "dchip p" + s.prio); c.dataset.spot = s.id;
-    if (opt.num) { c.classList.add("pl"); c.append(el("span", "no")); }
+    // つまみ（点々の部分）：ここをつかんで動かす。iPhone の長押しで文字が選ばれないように、タッチの標準の動きを止める
+    const handle = () => { const hd = el("span", "hd"); hd.setAttribute("role", "button"); hd.setAttribute("aria-label", `${s.name}をドラッグ`); hd.onpointerdown = e => startDrag(e, s.id, c, hd); hd.addEventListener("touchstart", e => e.preventDefault(), { passive: false }); hd.oncontextmenu = e => e.preventDefault(); return hd; };
+    if (opt.num) c.classList.add("pl");
     const nm = el("span", "nm", `${"★".repeat(s.prio)} ${s.name}`);
     if (opt.sub) nm.append(el("span", "sub", opt.sub));
     if (opt.tag) { nm.append(document.createElement("br")); nm.append(el("span", "tag", opt.tag)); }
     if (opt.num) {
-      const hd = el("span", "hd", "≡"); hd.setAttribute("aria-label", `${s.name}をドラッグ`); hd.onpointerdown = e => startDrag(e, s.id, c, hd);
-      c.append(nm, hd);
+      c.append(el("span", "no"), nm, handle());
       const x = el("button", "link", "×"); x.type = "button"; x.setAttribute("aria-label", `${s.name}を外す`); x.onclick = () => { unassign(s.id); changePlan(); }; c.append(x);
-    } else {
-      c.append(nm);
-      // 登録リストのカード：上へ引っぱるとドラッグ。横になぞると、リストがスクロールする
-      let sx = 0, sy = 0, down = false;
-      c.onpointerdown = e => { if (e.button != null && e.button > 0) return; down = true; sx = e.clientX; sy = e.clientY; try { c.setPointerCapture(e.pointerId); } catch {} };
-      c.onpointermove = e => { if (!down || dragging) return; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.hypot(dx, dy) > 9 && (e.pointerType === "mouse" || Math.abs(dy) >= Math.abs(dx) * 0.6)) { down = false; startDrag(e, s.id, c, c); } };
-      c.onpointerup = c.onpointercancel = () => { down = false; };
-    }
+    } else c.append(handle(), nm); // 登録リストのカード：左のつまみで動かす。カードのほかの場所をなぞると、リストが横にスクロールする
+    if (opt.used) c.classList.add("used");
     return c;
   }
   const showDay = k => {
@@ -1450,7 +1449,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     });
     // 登録リスト（画面の下に固定。横にスクロール）
     const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
-    const th = el("div", "th"); th.append(el("span", null, "登録リスト（上へドラッグ。戻すと外れる）"));
+    const th = el("div", "th"); th.append(el("span", null, "登録リスト（左の点々をつかんで上へ。戻すと外れる）"));
     const lb = el("label"), cb = el("input"); cb.type = "checkbox"; cb.checked = boardOnly; cb.id = "board-unused"; cb.onchange = () => { boardOnly = cb.checked; renderBoard(); };
     lb.append(cb, document.createTextNode("未配置のみ")); th.append(lb);
     const strip = el("div", "strip");
