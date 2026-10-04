@@ -42,6 +42,25 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:var(--accent);color:var(--paper)}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .btn.small{font-size:13px;padding:6px 11px}
+#board{display:grid;gap:12px;grid-template-columns:1fr;align-items:start}
+@media (min-width:720px){#board{grid-template-columns:1fr 1fr}}
+#board-tray{position:sticky;top:0;z-index:5;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow:auto}
+#board-tray.over,.dz.over{border-color:var(--accent);background:var(--accent-soft)}
+.dchip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--paper);font-size:14px;line-height:1.4}
+.dchip .nm{flex:1;min-width:0;overflow-wrap:anywhere}
+.dchip .sub{display:block;font-size:12px;color:var(--muted)}
+.dchip .hd{flex:none;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;padding:6px 8px;margin:-6px 0 -6px -8px;font-weight:700;color:var(--muted)}
+.dchip.used{opacity:.45}
+.dchip.lifting{opacity:.25}
+.dchip.ins{box-shadow:0 -3px 0 var(--accent)}
+.dchip.ghost{position:fixed;z-index:50;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25);opacity:.95;left:0;top:0}
+.dz{border:1.5px dashed var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:6px;min-height:42px}
+.dz.endins{box-shadow:inset 0 -3px 0 var(--accent)}
+.dz .hint{font-size:12px;color:var(--muted);text-align:center;padding:6px 0}
+.dayb{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:12px;padding:10px}
+.dayb h3{font-size:15px}
+.tl{font-size:13px;color:var(--muted);padding-left:4px;border-left:3px solid var(--line)}
+.tl b{color:var(--ink);font-weight:700}
 .btn.ghost.on{background:var(--accent);color:#fff}
 .btn:disabled{opacity:.5}
 .link{font:inherit;font-size:13px;background:none;border:0;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline}
@@ -228,6 +247,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         </div>
         <span class="note" id="geo-msg"></span>
         <p class="note" id="plan-note"></p>
+      </div>
+    </details>
+    <details class="card" id="board-card">
+      <summary>日ごとの予定を組む（ドラッグ） <span class="note" id="board-sum"></span></summary>
+      <div class="stack">
+        <p class="note">登録した場所を、日ごとの「午前・午後・夜」にドラッグして入れます。「≡」をつかんで動かしてください。場所を入れた順番が、お願い文に入ります。入れなおすときは別の場所へ、外すときは上の登録リストや「×」へ。拠点・外せない移動・食事は「日程と拠点」で入れます。</p>
+        <label class="row" style="gap:6px;justify-content:flex-start;flex-direction:row"><input type="checkbox" id="board-unused" style="width:auto"> まだ入れていない場所だけ出す</label>
+        <div id="board"></div>
       </div>
     </details>
     <details class="card" id="hub-card">
@@ -661,8 +688,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (sync.userId !== uid) sync = emptySync(uid); // はじめての人・別の人
     // 古い形のidを uuid に変える（1回だけ）
     let changed = false;
-    for (const sp of state.spots) if (!isUuid(sp.id)) { sp.id = await idFromOld(sp.id); changed = true; }
-    if (changed) save();
+    const idMap = {};
+    for (const sp of state.spots) if (!isUuid(sp.id)) { const old = sp.id; sp.id = await idFromOld(old); idMap[old] = sp.id; changed = true; }
+    if (changed) { // 日ごとの予定に入れた場所のidも、新しいidに書きかえる
+      let planMoved = false;
+      Object.values(state.plan.days).forEach(d => { const sl = d && d.slots; if (sl) Object.keys(sl).forEach(n => { if (Array.isArray(sl[n])) sl[n] = sl[n].map(x => { if (idMap[x]) { planMoved = true; return idMap[x]; } return x; }); }); });
+      if (planMoved) { sync.planDirty = true; saveSync(); }
+      save();
+    }
     for (const k of Object.keys(sync.dirty)) if (!isUuid(k)) { const op = sync.dirty[k]; delete sync.dirty[k]; sync.dirty[await idFromOld(k)] = op; }
     // 自分の名前を、同じ旅の人に見せられるように保存する（ログインごとに1回）
     if (cloud.savedProfileFor !== uid && cloud.features !== false) {
@@ -976,7 +1009,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const stayText = m => !m ? "" : m >= 60 ? `${m/60}時間` : `${m}分`;
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
-  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); }
+  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); }
   function renderSpotList(){
     const box = $("spots"); box.textContent = "";
     const showDone = $("show-done").checked;
@@ -1006,7 +1039,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const m = el("a", null, "地図"); m.href = s.map && /^https?:\/\//i.test(s.map) ? s.map : mapsQ(`${s.name} ${s.area || ""}`.trim()); m.target = "_blank"; m.rel = "noopener"; m.style.fontSize = "13px";
       const ed = el("button","link","編集"); ed.type = "button"; ed.onclick = () => startEdit(s.id);
       const del = el("button","link","削除"); del.type = "button";
-      del.onclick = () => { if (del.dataset.sure) { state.spots = state.spots.filter(x => x.id !== s.id); save(); cloudMark(s.id, "del"); renderSpots(); } else { del.dataset.sure = "1"; del.textContent = "本当に？"; del.style.color = "var(--star)"; } };
+      del.onclick = () => { if (del.dataset.sure) { state.spots = state.spots.filter(x => x.id !== s.id); if (whereIs(s.id)) { unassign(s.id); cloudMarkPlan(); } save(); cloudMark(s.id, "del"); renderSpots(); } else { del.dataset.sure = "1"; del.textContent = "本当に？"; del.style.color = "var(--star)"; } };
       ops.append(m, ed, del);
       c.append(chk, body, ops); box.append(c);
     }
@@ -1210,7 +1243,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function pruneDay(k){
     const day = state.plan.days[k]; if (!day) return;
     if (Array.isArray(day.moves) && !day.moves.length) delete day.moves;
-    if (!day.am && !day.pm && !day.meals && !day.moves) delete state.plan.days[k];
+    if (day.slots) { Object.keys(day.slots).forEach(n => { if (!Array.isArray(day.slots[n]) || !day.slots[n].length) delete day.slots[n]; }); if (!Object.keys(day.slots).length) delete day.slots; }
+    if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots) delete state.plan.days[k];
   }
   function moveEditor(k){
     const wrap = el("div", "stack"); wrap.style.gap = "8px"; wrap.dataset.moves = k;
@@ -1239,6 +1273,118 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     };
     form.append(kind, name, from, to, dl, al, memo, add, msg); wrap.append(form);
     return wrap;
+  }
+  // ---- 日ごとの予定（ドラッグで組む）：plan.days[日付].slots = { am: [場所id], pm: [...], ev: [...] }（午前・午後・夜。入れた順番を保つ） ----
+  const SLOTS = [["am", "午前（朝食のあと〜昼食）"], ["pm", "午後（昼食のあと〜夕食）"], ["ev", "夜（夕食のあと）"]];
+  const SLOT_SHORT = { am: "午前", pm: "午後", ev: "夜" };
+  const slotsOf = k => { const sl = (state.plan.days[k] || {}).slots; return sl && typeof sl === "object" ? sl : {}; };
+  const slotIds = (k, sl) => (Array.isArray(slotsOf(k)[sl]) ? slotsOf(k)[sl] : []).filter(id => state.spots.some(x => x.id === id));
+  const spotById = id => state.spots.find(x => x.id === id);
+  function whereIs(id){ const list = dayList(); for (let i = 0; i < list.length; i++) for (const sl of ["am", "pm", "ev"]) if (slotIds(list[i], sl).includes(id)) return { k: list[i], i, sl }; return null; }
+  function unassign(id){
+    Object.keys(state.plan.days).forEach(k => {
+      const day = state.plan.days[k], sl = day && day.slots; if (!sl) return;
+      Object.keys(sl).forEach(n => { sl[n] = (Array.isArray(sl[n]) ? sl[n] : []).filter(x => x !== id); if (!sl[n].length) delete sl[n]; });
+      pruneDay(k);
+    });
+  }
+  function placeSpot(id, k, sl, index){
+    unassign(id);
+    const day = state.plan.days[k] = state.plan.days[k] || {}; day.slots = day.slots || {};
+    const arr = Array.isArray(day.slots[sl]) ? day.slots[sl] : (day.slots[sl] = []);
+    arr.splice(Math.max(0, Math.min(index, arr.length)), 0, id);
+    changePlan();
+  }
+  const dayAt = (list, i) => { const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"); return { am, pm, same: hasBase(am) && hasBase(pm) && sameBase(am, pm) }; };
+  // 場所の一覧：この日の予定に入っている場所を、区分ごとに「午前：A→B」のように短くまとめる
+  const slotLine = k => SLOTS.map(([sl]) => { const n = slotIds(k, sl).map(id => spotById(id).name); return n.length ? `${SLOT_SHORT[sl]}：${n.join("→")}` : ""; }).filter(Boolean).join("／");
+  let dragging = null, boardDirty = false;
+  function chipFor(s, opt){
+    const c = el("div", "dchip"); c.dataset.spot = s.id;
+    const hd = el("span", "hd", "≡"); hd.setAttribute("aria-label", `${s.name}をドラッグ`); hd.onpointerdown = e => startDrag(e, s.id, c, hd);
+    const nm = el("span", "nm", `${"★".repeat(s.prio)} ${s.name}`);
+    if (opt.sub) nm.append(el("span", "sub", opt.sub));
+    c.append(hd, nm);
+    if (opt.x) { const x = el("button", "link", "×"); x.type = "button"; x.setAttribute("aria-label", `${s.name}を外す`); x.onclick = () => { unassign(s.id); changePlan(); }; c.append(x); }
+    if (opt.used) c.classList.add("used");
+    return c;
+  }
+  function renderBoard(){
+    if (dragging) { boardDirty = true; return; }
+    boardDirty = false;
+    const box = $("board"), list = dayList();
+    $("board-card").hidden = false;
+    const open = sorted().filter(s => !s.done), only = $("board-unused").checked;
+    const placed = open.filter(s => whereIs(s.id)).length;
+    $("board-sum").textContent = list.length ? `（${placed}/${open.length}か所を入れた）` : "";
+    box.textContent = "";
+    if (!list.length) { box.append(el("p", "note", "「日程と拠点」で旅の開始日と終了日を入れると、日ごとの枠ができます。")); return; }
+    const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
+    tray.append(el("span", "note", "登録リスト（ここからドラッグ。ここに戻すと外れます）"));
+    const shown = open.filter(s => !only || !whereIs(s.id));
+    if (!shown.length) tray.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
+    shown.forEach(s => { const w = whereIs(s.id); tray.append(chipFor(s, { used: !!w, sub: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}に入っています` : "" })); });
+    const days = el("div", "stack"); days.style.gap = "12px";
+    list.forEach((k, i) => {
+      const dv = el("div", "dayb"), da = dayAt(list, i);
+      dv.append(el("h3", null, dayLabel(k, i)));
+      const row = html => { const t = el("div", "tl"); t.innerHTML = ""; html.forEach(x => t.append(typeof x === "string" ? document.createTextNode(x) : x)); return t; };
+      const b = t => { const e = el("b", null, t); return e; };
+      dv.append(row(["朝の拠点：", b(da.am ? baseName(da.am) : "未設定")]));
+      movesOf(k).forEach(m => dv.append(row(["外せない移動：", b(moveText(m))])));
+      const meal = key => { const m = mealsOf(k)[key]; return hasMeal(m) ? mealText(m) : "おまかせ"; };
+      const mealRow = (key, label) => row([`${label}：`, b(meal(key))]);
+      dv.append(mealRow("b", "朝食"));
+      SLOTS.forEach(([sl, label], n) => {
+        const z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dayLabel(k, i)} ${label}`);
+        z.append(el("span", "note", label));
+        const ids = slotIds(k, sl);
+        if (!ids.length) z.append(el("div", "hint", "ここにドロップ"));
+        ids.forEach(id => { const s = spotById(id); const d = distText(s, da); z.append(chipFor(s, { x: true, sub: d })); });
+        dv.append(z);
+        if (n === 0) dv.append(mealRow("l", "昼食"));
+        if (n === 1) dv.append(mealRow("d", "夕食"));
+      });
+      dv.append(row(["夜の拠点：", b(da.pm ? baseName(da.pm) : "未設定")]));
+      days.append(dv);
+    });
+    box.append(tray, days);
+  }
+  $("board-unused").onchange = renderBoard;
+  function startDrag(e, id, chip, hd){
+    if (e.button != null && e.button > 0) return;
+    e.preventDefault();
+    const ghost = chip.cloneNode(true); ghost.classList.remove("used"); ghost.classList.add("ghost"); ghost.style.width = chip.offsetWidth + "px"; document.body.append(ghost);
+    chip.classList.add("lifting");
+    const st = dragging = { id, chip, ghost, hd, pid: e.pointerId, x: e.clientX, y: e.clientY, zone: null, idx: 0, raf: 0, ox: e.clientX - chip.getBoundingClientRect().left, oy: e.clientY - chip.getBoundingClientRect().top };
+    try { hd.setPointerCapture(e.pointerId); } catch {}
+    const clear = () => { document.querySelectorAll("#board .over,#board .endins,#board .ins").forEach(n => n.classList.remove("over", "endins", "ins")); };
+    const update = () => {
+      st.ghost.style.transform = `translate(${st.x - st.ox}px,${st.y - st.oy}px)`;
+      clear(); st.zone = null;
+      const z = document.elementFromPoint(st.x, st.y); const dz = z && z.closest && z.closest("#board [data-drop]");
+      if (!dz) return;
+      st.zone = dz; dz.classList.add("over");
+      const chips = [...dz.querySelectorAll(":scope > .dchip")].filter(c => c !== st.chip);
+      let idx = chips.length; for (let n = 0; n < chips.length; n++) { const r = chips[n].getBoundingClientRect(); if (st.y < r.top + r.height / 2) { idx = n; break; } }
+      st.idx = idx;
+      if (dz.dataset.drop === "slot") { if (idx < chips.length) chips[idx].classList.add("ins"); else dz.classList.add("endins"); }
+    };
+    // 画面の上や下の端に近づいたら、ページを自動でスクロールする
+    const loop = () => { if (dragging !== st) return; const h = innerHeight; if (st.y < 90) scrollBy(0, -Math.ceil((90 - st.y) / 6)); else if (st.y > h - 90) scrollBy(0, Math.ceil((st.y - (h - 90)) / 6)); update(); st.raf = requestAnimationFrame(loop); };
+    const move = ev => { if (ev.pointerId !== st.pid) return; st.x = ev.clientX; st.y = ev.clientY; };
+    const end = ev => {
+      if (ev.pointerId !== st.pid) return;
+      hd.removeEventListener("pointermove", move); hd.removeEventListener("pointerup", end); hd.removeEventListener("pointercancel", end);
+      cancelAnimationFrame(st.raf); update(); clear();
+      const zone = ev.type === "pointercancel" ? null : st.zone, idx = st.idx;
+      st.ghost.remove(); st.chip.classList.remove("lifting"); dragging = null;
+      if (zone && zone.dataset.drop === "tray") { unassign(st.id); changePlan(); }
+      else if (zone) placeSpot(st.id, zone.dataset.date, zone.dataset.slot, idx);
+      else if (boardDirty) renderBoard();
+    };
+    hd.addEventListener("pointermove", move); hd.addEventListener("pointerup", end); hd.addEventListener("pointercancel", end);
+    update(); st.raf = requestAnimationFrame(loop);
   }
   // ---- 食事の希望（日ごとの朝食・昼食・夕食。お店の名前・住所・時刻。あくまで希望として、お願い文に入れる） ----
   const MEALS = [["b", "朝食"], ["l", "昼食"], ["d", "夕食"]];
@@ -1740,7 +1886,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const mealLines = ad ? MEALS.filter(([key]) => hasMeal(ad.meals[key])).map(([key, label]) => `- ${label}：${mealText(ad.meals[key])}`) : [];
     if (mealLines.length) L.push("## 今日の食事の希望", ...mealLines, "");
     const open = sorted().filter(s => !s.done), done = state.spots.filter(s => s.done);
-    const todo = open.filter(s => inRadius(s, ad)), far = open.filter(s => !inRadius(s, ad));
+    const mine = ad ? slotLine(ad.date) : "";
+    const picked = s => ad && !!whereIs(s.id) && whereIs(s.id).k === ad.date; // 自分でこの日に入れた場所は、距離で外さない
+    const todo = open.filter(s => picked(s) || inRadius(s, ad)), far = open.filter(s => !picked(s) && !inRadius(s, ad));
+    if (mine) L.push("## 自分で組んだ今日の予定（この区分と順番で回りたい）", `- ${mine}`, "");
     L.push(`## 行きたい場所（上ほど優先${radiusKm() ? `。拠点から${radiusKm()}km以内に絞った` : ""}）`);
     if (!todo.length) L.push("- なし");
     todo.forEach((s, i) => {
@@ -1762,6 +1911,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       ...(todo.some(x => distInfo(x, ad).length || nearestHub(x)) ? [`- ${hubs().length ? "拠点や交通の拠点" : "拠点"}からの距離は直線距離。実際の道のりや電車の時間は調べなおす`] : []),
       ...(hubs().length ? ["- 登録した交通の拠点（駅・バス停など）を乗り降りの起点にして、乗る駅・降りる駅（バス停）とのりかえを書く"] : []),
       ...(mealLines.length ? ["- 食事の希望は、できるだけ生かして時間を組む（ルートの都合で、時間や場所は変えてもよい）。希望のない食事は、ルートの近くで探してよい"] : []),
+      ...(mine ? ["- 「自分で組んだ今日の予定」の区分（午前・午後・夜）と順番を基本にして時刻を組む。無理なら入れかえてよいが、理由を書く"] : []),
       ...(moveLines.length ? [`- 外せない移動は、時刻も乗り場も動かさない。出発の${ad.moves.some(m => m.kind === "飛行機") ? "30分〜1時間" : "30分"}前までに乗り場に着けるよう、他の予定をその前後に収める。間に合わない予定は外し、危ういときは正直に伝える`] : []),
       "- 移動ごとに出発時刻・手段（路線やバス停）・所要時間・運賃の目安と、Googleマップの経路リンク",
       "- 最初に「いますぐやること」を1行、そのあと時刻順の短い箇条書き。確かめられない情報は「要確認」"
@@ -1788,12 +1938,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   // 旅の前の計画用：行きたい場所を、拠点からの距離で日ごとに割りふってもらう
   function buildPlanPrompt(){
-    const list = dayList(), S = id => $(id).value.trim(), bases = []; let anyMeal = false, anyMove = false;
+    const list = dayList(), S = id => $(id).value.trim(), bases = []; let anyMeal = false, anyMove = false, anyOwn = false;
     const keyOf = b => (b.name || "") + "|" + (b.address || "");
     const letter = b => { const k = keyOf(b); let i = bases.findIndex(x => keyOf(x) === k); if (i < 0) { bases.push(b); i = bases.length - 1; } return String.fromCharCode(65 + i); };
     const L = ["旅先の案内係として、旅全体の日割りプランを考えてください。", "", "## 日程と拠点"];
     list.forEach((k, i) => { const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"); L.push(`- ${dayLabel(k, i)} 朝:${am ? letter(am) : "なし"} 夜:${pm ? letter(pm) : "なし"}`);
       const ml = MEALS.filter(([key]) => hasMeal(mealsOf(k)[key])).map(([key, label]) => `${label} ${mealText(mealsOf(k)[key])}`);
+      const own = slotLine(k); if (own) { L.push(`  自分で組みずみ：${own}`); anyOwn = true; }
       const mvl = movesOf(k).map(moveText);
       if (mvl.length) { L.push(`  外せない移動（動かせない）：${mvl.join("／")}`); anyMove = true; }
       if (ml.length) { L.push(`  食事の希望：${ml.join("／")}`); anyMeal = true; } });
@@ -1817,6 +1968,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       "- 1日ごとに、順番・滞在時間・移動手段と所要時間の目安。到着日と出発日は予定を軽めに",
       "- 距離は直線距離。実際の道のりや電車の時間は調べなおす",
       ...(hubs().length ? ["- 登録した交通の拠点（駅・バス停など）を乗り降りの起点にして、日ごとに乗る駅・降りる駅（バス停）を書く"] : []),
+      ...(anyOwn ? ["- 「自分で組みずみ」の場所は、その日・その区分のまま変えない。まだ入れていない場所だけを割りふる"] : []),
       ...(anyMove ? ["- 日ごとの「外せない移動」は動かせない。時刻と乗り場を守り、その前後（乗り場に着く余裕を含む）に他の予定を収める。収まらない日は、正直に伝える"] : []),
       ...(anyMeal ? ["- 日ごとの食事の希望は、できるだけ生かす（ルートの都合で変えてもよい）。希望のない食事は、その日のルートの近くで探してよい"] : []),
       "- 最初に日割りの一覧（日／朝の拠点／回る場所／夜の拠点）、そのあと日ごとの詳細。確かめられない情報は「要確認」");
