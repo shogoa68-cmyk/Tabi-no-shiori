@@ -1385,7 +1385,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 食事は、拠点に次ぐ「基準点」。枠の起点＝その枠の前の食事（位置が分かるもの）、なければ拠点
   const MEAL_NAME = { b: "朝食", l: "昼食", d: "夕食" };
   function slotAnchor(k, da, sl){
-    for (const key of sl === "am" ? ["b"] : sl === "pm" ? ["l", "b"] : ["d", "l", "b"]) { const m = mealsOf(k)[key]; if (hasPos(m)) return { p: m, label: MEAL_NAME[key] + (m.name ? `（${m.name}）` : "") }; }
+    for (const key of sl === "am" ? ["b"] : sl === "pm" ? ["l", "b"] : ["d", "l", "b"]) { const m = mealsOf(k)[key]; if (hasPos(m)) return { p: m, label: MEAL_NAME[key] + (m.name ? `（${mealKind(m) === "station" ? "駅：" : ""}${m.name}）` : "") }; }
     const b = sl === "ev" ? da.pm : da.am; return hasPos(b) ? { p: b, label: sl === "ev" ? "夜の拠点" : "朝の拠点" } : null;
   }
   function slotNext(k, da, sl){ // その枠のあとに行く所（次の食事、夜は夜の拠点）
@@ -1473,7 +1473,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       dv.append(rt);
       movesOf(k).forEach(m => { const t = el("div", "tkt"); t.append(el("span", "tm", m.dep || "--:--")); const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${m.kind || ""}${m.name ? "　" + m.name : ""}`)); t.append(w); dv.append(t); });
       const rail = el("div", "rail");
-      const meal = (key, label) => { const m = mealsOf(k)[key]; const n = el("div", "node"); n.append(el("b", null, label), document.createTextNode(hasMeal(m) ? mealText(m) : "おまかせ")); return n; };
+      const meal = (key, label) => { const m = mealsOf(k)[key]; const n = el("div", "node"); n.append(el("b", null, label), document.createTextNode(hasMeal(m) ? mealShort(m) : "おまかせ")); return n; };
       rail.append(meal("b", "朝食"));
       SLOTS.forEach(([sl, label], n) => {
         const z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dayLabel(k, i)} ${label}`);
@@ -1586,13 +1586,19 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   // ---- 食事の希望（日ごとの朝食・昼食・夕食。お店の名前・住所・時刻。あくまで希望として、お願い文に入れる） ----
   const MEALS = [["b", "朝食"], ["l", "昼食"], ["d", "夕食"]];
-  const hasMeal = m => !!m && !!(m.name || m.address || m.time);
-  const mealText = m => `${m.name || "（お店は未定）"}${m.address ? "（" + m.address + "）" : ""}${m.time ? "　" + m.time + "ごろ" : ""}`;
+  // 食事のしかた：お店を決める（ふつう）／風まかせ（場所は決めない）／駅（駅の近くで食べる）。古いデータ（kind なし）は「お店を決める」
+  const mealKind = m => m && (m.kind === "wind" || m.kind === "station") ? m.kind : "shop";
+  const hasMeal = m => !!m && (m.kind === "wind" || !!(m.name || m.address || m.time));
+  const mealTime = m => m.time ? "　" + m.time + "ごろ" : "";
+  const mealText = m => mealKind(m) === "wind" ? `風まかせ（場所は決めない。ルートの近くで探してよい）${mealTime(m)}`
+    : mealKind(m) === "station" ? `${m.name || "駅"}の周辺で（駅の近くで食べる）${m.address ? "（" + m.address + "）" : ""}${mealTime(m)}`
+    : `${m.name || "（お店は未定）"}${m.address ? "（" + m.address + "）" : ""}${mealTime(m)}`;
+  const mealShort = m => mealKind(m) === "wind" ? "風まかせ" + mealTime(m) : mealKind(m) === "station" ? `駅：${m.name || "（未定）"}${mealTime(m)}` : mealText(m);
   const mealsOf = k => (state.plan.days[k] || {}).meals || {};
   // 食事の場所の位置を、住所から調べる（住所があるときだけ。名前だけだと別の場所が出やすいので調べない）
   async function locateMeal(k, key){
-    const m0 = mealsOf(k)[key]; if (!m0 || !m0.address) return false;
-    const r = await geocode({ address: m0.address, name: m0.name });
+    const m0 = mealsOf(k)[key]; if (!m0 || !(m0.address || (mealKind(m0) === "station" && m0.name))) return false;
+    const r = await geocode({ address: m0.address, name: mealKind(m0) === "station" ? hubFull({ kind: "駅", name: m0.name }) : m0.name });
     const m = mealsOf(k)[key];
     if (!m || m.name !== m0.name || m.address !== m0.address) return false;
     if (r) { m.lat = r.lat; m.lng = r.lng; changePlan(); }
@@ -1601,32 +1607,52 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function mkInput(cls, label, max){ const i = el("input"); i.className = cls; i.maxLength = max; i.setAttribute("aria-label", label); return i; }
   function mealEditor(k){
     const wrap = el("div", "stack"); wrap.style.gap = "12px";
-    wrap.append(el("span", "note", "食事の希望（あくまで希望として、ルートの提案に伝えます。空の食事は「おまかせ」です）"));
+    wrap.append(el("span", "note", "食事の希望（あくまで希望として、ルートの提案に伝えます）。お店が決まっていないときは、「風まかせ」か「駅」を選べます。"));
     MEALS.forEach(([key, label]) => {
       const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.meal = key; box.dataset.date = k;
       box.append(el("span", "note", label));
+      const cur = mealsOf(k)[key] || {};
+      const kindSel = el("select"); kindSel.className = "m-kind"; kindSel.setAttribute("aria-label", `${label}のきめかた`);
+      [["shop", "お店を決める（またはおまかせ）"], ["wind", "風まかせ（場所は決めない）"], ["station", "駅の近くで食べる"]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; kindSel.append(o); });
+      kindSel.value = mealKind(cur);
       const url = mkInput("m-url", `${label}のお店のGoogleマップURL`, 2000); url.type = "url"; url.placeholder = "Googleマップのリンクを貼る";
-      const name = mkInput("m-name", `${label}のお店の名前`, 60); name.placeholder = "お店の名前（例：京つけもの 西利）";
-      const addr = mkInput("m-addr", `${label}のお店の住所`, 120); addr.placeholder = "住所";
+      const hub = el("select"); hub.className = "m-hub"; hub.setAttribute("aria-label", `${label}の駅を選ぶ`);
+      const name = mkInput("m-name", `${label}のお店や駅の名前`, 60);
+      const addr = mkInput("m-addr", `${label}の住所`, 120);
       const time = mkInput("m-time", `${label}の予約や希望の時刻`, 5); time.type = "time";
-      const tl = el("label", null, "予約や希望の時刻"); tl.append(time);
+      const tl = el("label", null, "予約や希望の時刻（わかれば）"); tl.append(time);
       const msg = el("span", "note");
       const clear = el("button", "link", `${label}を空にする（おまかせに戻す）`); clear.type = "button"; clear.style.alignSelf = "flex-start";
-      const cur = mealsOf(k)[key] || {};
       name.value = cur.name || ""; addr.value = cur.address || ""; time.value = cur.time || "";
+      const fillHubs = () => { // 登録した駅（「交通の拠点」）から選べる
+        hub.textContent = ""; const o0 = document.createElement("option"); o0.value = ""; o0.textContent = "登録した駅から選ぶ…"; hub.append(o0);
+        hubs().filter(h => h.kind === "駅").forEach(h => { const o = document.createElement("option"); o.value = h.id; o.textContent = h.name; hub.append(o); });
+        hub.hidden = kindSel.value !== "station" || hub.options.length < 2;
+      };
+      const applyKind = () => {
+        const kd = kindSel.value;
+        url.hidden = kd !== "shop"; name.hidden = addr.hidden = kd === "wind"; fillHubs();
+        name.placeholder = kd === "station" ? "駅の名前（例：京都駅）" : "お店の名前（例：京つけもの 西利）";
+        addr.placeholder = kd === "station" ? "駅の住所（わかれば。空なら名前から位置を調べます）" : "住所";
+      };
+      applyKind(); box.addEventListener("hubs-changed", fillHubs); // 交通の拠点（駅）がふえたら、選択肢も更新する
       const commit = coords => {
         const day = state.plan.days[k] = state.plan.days[k] || {};
-        const m = { name: name.value.trim(), address: addr.value.trim(), time: time.value };
+        const kd = kindSel.value;
+        const m = kd === "wind" ? { kind: "wind", name: "", address: "", time: time.value } : { name: name.value.trim(), address: addr.value.trim(), time: time.value };
+        if (kd === "station") m.kind = "station";
         day.meals = day.meals || {};
         const old = day.meals[key] || {}; // お店が同じなら位置を引きつぐ。Googleマップのリンクに位置があれば使う
-        if (old.name === m.name && old.address === m.address && hasPos(old)) { m.lat = old.lat; m.lng = old.lng; }
-        if (coords && hasPos(coords)) { m.lat = coords.lat; m.lng = coords.lng; }
-        if (!hasMeal(m)) delete day.meals[key]; else day.meals[key] = m;
+        if (kd !== "wind" && mealKind(old) === kd && old.name === m.name && old.address === m.address && hasPos(old)) { m.lat = old.lat; m.lng = old.lng; }
+        if (kd !== "wind" && coords && hasPos(coords)) { m.lat = coords.lat; m.lng = coords.lng; }
+        if (kd !== "wind" && !hasMeal(m)) delete day.meals[key]; else day.meals[key] = m;
         if (!Object.keys(day.meals).length) delete day.meals;
         pruneDay(k);
         changePlan(); refreshPlanLabels();
-        const cur2 = (state.plan.days[k] || {}).meals; if (cur2 && cur2[key] && cur2[key].address && !hasPos(cur2[key])) locateMeal(k, key);
+        const cur2 = (state.plan.days[k] || {}).meals; if (cur2 && cur2[key] && !hasPos(cur2[key])) locateMeal(k, key);
       };
+      kindSel.onchange = () => { applyKind(); commit(); };
+      hub.onchange = () => { const h = hubs().find(x => x.id === hub.value); if (!h) return; name.value = h.name; addr.value = h.address || ""; hub.value = ""; commit(h); };
       name.onchange = addr.onchange = time.onchange = () => commit();
       url.onchange = async () => {
         if (!url.value.trim()) return;
@@ -1637,8 +1663,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         if (info.address && !addr.value.trim()) addr.value = info.address;
         url.value = ""; msg.textContent = "入れました。ちがっていたら直してください"; commit(info);
       };
-      clear.onclick = () => { name.value = ""; addr.value = ""; time.value = ""; msg.textContent = ""; commit(); };
-      box.append(url, name, addr, tl, msg, clear); wrap.append(box);
+      clear.onclick = () => { kindSel.value = "shop"; applyKind(); name.value = ""; addr.value = ""; time.value = ""; msg.textContent = ""; commit(); };
+      box.append(kindSel, url, hub, name, addr, tl, msg, clear); wrap.append(box);
     });
     return wrap;
   }
@@ -1816,6 +1842,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const walkText = d => d <= 2.5 ? `・徒歩約${walkMin(d)}分（目安）` : "";
   function renderHubList(){
     const box = $("hub-list"), ad = activeDay(); box.textContent = "";
+    document.querySelectorAll("#plan-days [data-meal]").forEach(n => n.dispatchEvent(new Event("hubs-changed")));
     $("hub-sum").textContent = hubs().length ? `（${hubs().length}か所）` : "";
     if (!hubs().length) box.append(el("p", "note", "まだ登録していません。"));
     const base = ad && (hasBase(ad.am) ? ad.am : hasBase(ad.pm) ? ad.pm : null);
