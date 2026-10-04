@@ -16,6 +16,7 @@
 :root{
   --bg:#F3F6F2; --paper:#FFFFFF; --ink:#1D2B36; --muted:#5E6E78; --line:#D9E1DC;
   --accent:#2F6F62; --accent-soft:#E2EFEA; --star:#C4533A; --warn-soft:#F8E6E0;
+  --sl-am-bg:#E6F1F8; --sl-am-bar:#4B9BCB; --sl-pm-bg:#FDF0DC; --sl-pm-bar:#E39A2D; --sl-ev-bg:#EAE9F8; --sl-ev-bar:#6A62C6;
   --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN",system-ui,sans-serif;
   --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,monospace;
@@ -23,7 +24,8 @@
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#141B20; --paper:#1C252C; --ink:#E6ECEF; --muted:#9AA8B1; --line:#2F3B43;
-  --accent:#6FC2AE; --accent-soft:#1F3833; --star:#F08A70; --warn-soft:#3A2520; color-scheme:dark}}
+  --accent:#6FC2AE; --accent-soft:#1F3833; --star:#F08A70; --warn-soft:#3A2520; color-scheme:dark;
+  --sl-am-bg:#1B2F3B; --sl-am-bar:#5DB0E0; --sl-pm-bg:#3A2E1B; --sl-pm-bar:#E8A94A; --sl-ev-bg:#26264A; --sl-ev-bar:#8F88E6}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
@@ -42,25 +44,59 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:var(--accent);color:var(--paper)}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .btn.small{font-size:13px;padding:6px 11px}
-#board{display:grid;gap:12px;grid-template-columns:1fr;align-items:start}
-@media (min-width:720px){#board{grid-template-columns:1fr 1fr}}
-#board-tray{position:sticky;top:0;z-index:5;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow:auto}
-#board-tray.over,.dz.over{border-color:var(--accent);background:var(--accent-soft)}
-.dchip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--paper);font-size:14px;line-height:1.4}
-.dchip .nm{flex:1;min-width:0;overflow-wrap:anywhere}
-.dchip .sub{display:block;font-size:12px;color:var(--muted)}
-.dchip .hd{flex:none;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;padding:6px 8px;margin:-6px 0 -6px -8px;font-weight:700;color:var(--muted)}
-.dchip.used{opacity:.45}
+#board-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:none}
+#board-tabs::-webkit-scrollbar{display:none}
+.dtab{flex:none;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);border-radius:14px;padding:6px 12px;font:inherit;font-size:13px;line-height:1.3;text-align:center;cursor:pointer}
+.dtab b{display:block;font-family:var(--display);font-size:15px}
+.dtab small{display:block;color:var(--muted);font-size:11px}
+.dtab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.dtab.on small{color:#fff;opacity:.85}
+.dtab.over{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.dayv{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.route{display:flex;align-items:center;gap:8px}
+.route .pin{flex:none;max-width:42%;background:var(--accent-soft);border:1px solid var(--accent);border-radius:99px;padding:4px 12px;font-size:12.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.route svg{flex:1;min-width:24px;height:14px}
+.route svg line{stroke:var(--accent);stroke-width:2;stroke-dasharray:4 4}
+.route svg path{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tkt{position:relative;display:flex;gap:10px;align-items:center;background:var(--paper);border:1.5px dashed var(--star);border-radius:12px;padding:8px 12px;font-size:13px;line-height:1.45}
+.tkt .tm{flex:none;font-family:var(--mono);font-size:15px;font-weight:500;color:var(--star)}
+.tkt .kd{display:block;font-size:11px;color:var(--muted)}
+.rail{position:relative;margin-left:10px;padding-left:20px;display:flex;flex-direction:column;gap:10px;border-left:3px solid var(--line)}
+.node{position:relative;font-size:13px;color:var(--muted);line-height:1.4}
+.node::before{content:"";position:absolute;left:-30px;top:3px;width:15px;height:15px;border-radius:50%;background:var(--paper);border:3px solid var(--accent)}
+.node b{display:inline-block;margin-right:6px;color:var(--ink);font-family:var(--display)}
+.dz{--bar:var(--line);position:relative;display:flex;flex-direction:column;gap:6px;min-height:64px;padding:8px 8px 8px 12px;border-radius:12px;background:var(--bg);counter-reset:n}
+.dz::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:5px;border-radius:5px;background:var(--bar)}
+.dz[data-slot=am]{--bar:var(--sl-am-bar);background:var(--sl-am-bg)}
+.dz[data-slot=pm]{--bar:var(--sl-pm-bar);background:var(--sl-pm-bg)}
+.dz[data-slot=ev]{--bar:var(--sl-ev-bar);background:var(--sl-ev-bg)}
+.dz .zt{font-family:var(--display);font-weight:700;font-size:13px;color:var(--ink)}
+.dz .zt small{font-weight:400;color:var(--muted);margin-left:6px}
+.dz.over{outline:2.5px solid var(--bar);outline-offset:1px}
+.dz.endins{box-shadow:inset 0 -4px 0 var(--bar)}
+.dz .hint{font-size:12px;color:var(--muted);text-align:center;padding:10px 0;border:1.5px dashed var(--bar);border-radius:10px;background:rgba(255,255,255,.35)}
+.dchip{display:flex;gap:8px;align-items:center;background:var(--paper);border:1px solid var(--line);border-left:5px solid var(--muted);border-radius:10px;padding:7px 8px;font-size:14px;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.dchip.p3{border-left-color:var(--star)}.dchip.p2{border-left-color:var(--accent)}
+.dchip .nm{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}
+.dchip .sub{display:block;font-size:11.5px;font-weight:400;color:var(--muted)}
+.dchip .hd{flex:none;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;padding:8px 6px;margin:-8px 0;font-weight:700;font-size:18px;color:var(--muted)}
+.dchip.pl .no::before{counter-increment:n;content:counter(n)}
+.dchip .no{flex:none;width:22px;height:22px;border-radius:50%;background:var(--bar,var(--ink));color:#fff;font-size:12px;display:grid;place-items:center;font-weight:700}
 .dchip.lifting{opacity:.25}
-.dchip.ins{box-shadow:0 -3px 0 var(--accent)}
-.dchip.ghost{position:fixed;z-index:50;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25);opacity:.95;left:0;top:0}
-.dz{border:1.5px dashed var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:6px;min-height:42px}
-.dz.endins{box-shadow:inset 0 -3px 0 var(--accent)}
-.dz .hint{font-size:12px;color:var(--muted);text-align:center;padding:6px 0}
-.dayb{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:12px;padding:10px}
-.dayb h3{font-size:15px}
-.tl{font-size:13px;color:var(--muted);padding-left:4px;border-left:3px solid var(--line)}
-.tl b{color:var(--ink);font-weight:700}
+.dchip.ins{box-shadow:0 -4px 0 var(--bar,var(--accent))}
+.dchip.ghost{position:fixed;z-index:50;pointer-events:none;box-shadow:0 8px 22px rgba(0,0,0,.3);opacity:.96;left:0;top:0;transform-origin:0 0}
+.dchip.ghost .no{display:none}
+.leg{align-self:center;font-size:11.5px;color:var(--muted);line-height:1;padding:1px 0}
+#board-tray{position:sticky;bottom:calc(var(--dock-h,130px) + 6px);z-index:4;margin-top:14px;background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:8px 8px 10px;box-shadow:0 -6px 18px rgba(0,0,0,.12)}
+#board-tray.over{border-color:var(--accent);background:var(--accent-soft)}
+#board-tray .th{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px}
+#board-tray label{white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:4px;font-size:12px}
+#board-tray .strip{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:none}
+#board-tray .strip::-webkit-scrollbar{display:none}
+#board-tray .dchip{flex:none;width:136px;touch-action:pan-x;cursor:grab;align-items:flex-start;font-size:13px}
+#board-tray .dchip.used{background:var(--bg)}
+#board-tray .dchip.used .nm{opacity:.55}
+#board-tray .dchip .tag{display:inline-block;margin-top:2px;padding:0 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700}
 .btn.ghost.on{background:var(--accent);color:#fff}
 .btn:disabled{opacity:.5}
 .link{font:inherit;font-size:13px;background:none;border:0;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline}
@@ -252,8 +288,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <details class="card" id="board-card">
       <summary>日ごとの予定を組む（ドラッグ） <span class="note" id="board-sum"></span></summary>
       <div class="stack">
-        <p class="note">登録した場所を、日ごとの「午前・午後・夜」にドラッグして入れます。「≡」をつかんで動かしてください。場所を入れた順番が、お願い文に入ります。入れなおすときは別の場所へ、外すときは上の登録リストや「×」へ。拠点・外せない移動・食事は「日程と拠点」で入れます。</p>
-        <label class="row" style="gap:6px;justify-content:flex-start;flex-direction:row"><input type="checkbox" id="board-unused" style="width:auto"> まだ入れていない場所だけ出す</label>
+        <p class="note">下の「登録リスト」のカードを、上の枠（午前・午後・夜）へ指で引っぱって入れます。入れたカードは「≡」で動かせます。日付のタブの上で少し止めると、別の日に切りかわります。入れた順番が、お願い文に入ります。外すときは、リストに戻すか「×」。拠点・移動・食事は「日程と拠点」で入れます。</p>
         <div id="board"></div>
       </div>
     </details>
@@ -1299,79 +1334,133 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 場所の一覧：この日の予定に入っている場所を、区分ごとに「午前：A→B」のように短くまとめる
   const slotLine = k => SLOTS.map(([sl]) => { const n = slotIds(k, sl).map(id => spotById(id).name); return n.length ? `${SLOT_SHORT[sl]}：${n.join("→")}` : ""; }).filter(Boolean).join("／");
   let dragging = null, boardDirty = false;
+  let boardOnly = false, boardDay = "";
+  const legKm = (a, b) => hasPos(a) && hasPos(b) ? fmtKm(km(a, b)) : "";
   function chipFor(s, opt){
-    const c = el("div", "dchip"); c.dataset.spot = s.id;
-    const hd = el("span", "hd", "≡"); hd.setAttribute("aria-label", `${s.name}をドラッグ`); hd.onpointerdown = e => startDrag(e, s.id, c, hd);
+    const c = el("div", "dchip p" + s.prio); c.dataset.spot = s.id;
+    if (opt.num) { c.classList.add("pl"); c.append(el("span", "no")); }
     const nm = el("span", "nm", `${"★".repeat(s.prio)} ${s.name}`);
     if (opt.sub) nm.append(el("span", "sub", opt.sub));
-    c.append(hd, nm);
-    if (opt.x) { const x = el("button", "link", "×"); x.type = "button"; x.setAttribute("aria-label", `${s.name}を外す`); x.onclick = () => { unassign(s.id); changePlan(); }; c.append(x); }
-    if (opt.used) c.classList.add("used");
+    if (opt.tag) { nm.append(document.createElement("br")); nm.append(el("span", "tag", opt.tag)); }
+    if (opt.num) {
+      const hd = el("span", "hd", "≡"); hd.setAttribute("aria-label", `${s.name}をドラッグ`); hd.onpointerdown = e => startDrag(e, s.id, c, hd);
+      c.append(nm, hd);
+      const x = el("button", "link", "×"); x.type = "button"; x.setAttribute("aria-label", `${s.name}を外す`); x.onclick = () => { unassign(s.id); changePlan(); }; c.append(x);
+    } else {
+      c.append(nm);
+      // 登録リストのカード：上へ引っぱるとドラッグ。横になぞると、リストがスクロールする
+      let sx = 0, sy = 0, down = false;
+      c.onpointerdown = e => { if (e.button != null && e.button > 0) return; down = true; sx = e.clientX; sy = e.clientY; try { c.setPointerCapture(e.pointerId); } catch {} };
+      c.onpointermove = e => { if (!down || dragging) return; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.hypot(dx, dy) > 9 && (e.pointerType === "mouse" || Math.abs(dy) >= Math.abs(dx) * 0.6)) { down = false; startDrag(e, s.id, c, c); } };
+      c.onpointerup = c.onpointercancel = () => { down = false; };
+    }
     return c;
   }
+  const showDay = k => {
+    boardDay = k;
+    document.querySelectorAll("#board .dayv").forEach(d => { d.hidden = d.dataset.date !== k; });
+    document.querySelectorAll("#board .dtab").forEach(t => t.classList.toggle("on", t.dataset.date === k));
+    const on = document.querySelector("#board .dtab.on"), tb = $("board-tabs"); if (on && tb) tb.scrollLeft = on.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; // タブの列だけ動かす（ページは動かさない）
+  };
   function renderBoard(){
     if (dragging) { boardDirty = true; return; }
     boardDirty = false;
     const box = $("board"), list = dayList();
     $("board-card").hidden = false;
-    const open = sorted().filter(s => !s.done), only = $("board-unused").checked;
+    const open = sorted().filter(s => !s.done);
     const placed = open.filter(s => whereIs(s.id)).length;
     $("board-sum").textContent = list.length ? `（${placed}/${open.length}か所を入れた）` : "";
     box.textContent = "";
     if (!list.length) { box.append(el("p", "note", "「日程と拠点」で旅の開始日と終了日を入れると、日ごとの枠ができます。")); return; }
-    const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
-    tray.append(el("span", "note", "登録リスト（ここからドラッグ。ここに戻すと外れます）"));
-    const shown = open.filter(s => !only || !whereIs(s.id));
-    if (!shown.length) tray.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
-    shown.forEach(s => { const w = whereIs(s.id); tray.append(chipFor(s, { used: !!w, sub: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}に入っています` : "" })); });
-    const days = el("div", "stack"); days.style.gap = "12px";
+    if (!list.includes(boardDay)) { const ad = activeDay(); boardDay = ad ? ad.date : list[0]; }
+    const dock = document.querySelector(".dock"); if (dock) box.style.setProperty("--dock-h", dock.offsetHeight + "px");
+    // 日付のタブ
+    const tabs = el("div"); tabs.id = "board-tabs"; tabs.setAttribute("role", "tablist");
     list.forEach((k, i) => {
-      const dv = el("div", "dayb"), da = dayAt(list, i);
-      dv.append(el("h3", null, dayLabel(k, i)));
-      const row = html => { const t = el("div", "tl"); t.innerHTML = ""; html.forEach(x => t.append(typeof x === "string" ? document.createTextNode(x) : x)); return t; };
-      const b = t => { const e = el("b", null, t); return e; };
-      dv.append(row(["朝の拠点：", b(da.am ? baseName(da.am) : "未設定")]));
-      movesOf(k).forEach(m => dv.append(row(["外せない移動：", b(moveText(m))])));
-      const meal = key => { const m = mealsOf(k)[key]; return hasMeal(m) ? mealText(m) : "おまかせ"; };
-      const mealRow = (key, label) => row([`${label}：`, b(meal(key))]);
-      dv.append(mealRow("b", "朝食"));
+      const t = el("button", "dtab"); t.type = "button"; t.dataset.date = k; t.dataset.drop = "tab"; t.setAttribute("role", "tab");
+      const n = ["am", "pm", "ev"].reduce((a, sl) => a + slotIds(k, sl).length, 0);
+      t.append(el("b", null, `${i + 1}日目`), el("small", null, `${md(k)}（${WD[dparse(k).getDay()]}）${n ? "・" + n + "か所" : ""}`));
+      t.onclick = () => showDay(k); tabs.append(t);
+    });
+    // 日ごとの画面
+    const days = el("div");
+    list.forEach((k, i) => {
+      const dv = el("div", "dayv"); dv.dataset.date = k; const da = dayAt(list, i);
+      // 朝の拠点 → 夜の拠点
+      const rt = el("div", "route");
+      const arrow = sv("svg", { viewBox: "0 0 100 14", preserveAspectRatio: "none", "aria-hidden": "true" }, "");
+      arrow.append(sv("line", { x1: 0, y1: 7, x2: 98, y2: 7 }), sv("path", { d: "M90 2 L98 7 L90 12" }));
+      rt.append(el("span", "pin", `朝　${da.am ? baseName(da.am) : "未設定"}`), arrow, el("span", "pin", `夜　${da.pm ? baseName(da.pm) : "未設定"}`));
+      dv.append(rt);
+      movesOf(k).forEach(m => { const t = el("div", "tkt"); t.append(el("span", "tm", m.dep || "--:--")); const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${m.kind || ""}${m.name ? "　" + m.name : ""}`)); t.append(w); dv.append(t); });
+      const rail = el("div", "rail");
+      const meal = (key, label) => { const m = mealsOf(k)[key]; const n = el("div", "node"); n.append(el("b", null, label), document.createTextNode(hasMeal(m) ? mealText(m) : "おまかせ")); return n; };
+      rail.append(meal("b", "朝食"));
       SLOTS.forEach(([sl, label], n) => {
         const z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dayLabel(k, i)} ${label}`);
-        z.append(el("span", "note", label));
+        const zt = el("div", "zt", SLOT_SHORT[sl]); zt.append(el("small", null, label.replace(/^[^（]*/, "").replace(/[（）]/g, ""))); z.append(zt);
         const ids = slotIds(k, sl);
-        if (!ids.length) z.append(el("div", "hint", "ここにドロップ"));
-        ids.forEach(id => { const s = spotById(id); const d = distText(s, da); z.append(chipFor(s, { x: true, sub: d })); });
-        dv.append(z);
-        if (n === 0) dv.append(mealRow("l", "昼食"));
-        if (n === 1) dv.append(mealRow("d", "夕食"));
+        if (!ids.length) z.append(el("div", "hint", "ここにカードをドロップ"));
+        ids.forEach((id, idx) => {
+          const s = spotById(id);
+          if (idx > 0) { const d = legKm(spotById(ids[idx - 1]), s); z.append(el("div", "leg", d ? `↓ 直線${d}` : "↓")); }
+          z.append(chipFor(s, { num: true, sub: distText(s, da) }));
+        });
+        rail.append(z);
+        if (n === 0) rail.append(meal("l", "昼食"));
+        if (n === 1) rail.append(meal("d", "夕食"));
       });
-      dv.append(row(["夜の拠点：", b(da.pm ? baseName(da.pm) : "未設定")]));
-      days.append(dv);
+      dv.append(rail); days.append(dv);
     });
-    box.append(tray, days);
+    // 登録リスト（画面の下に固定。横にスクロール）
+    const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
+    const th = el("div", "th"); th.append(el("span", null, "登録リスト（上へドラッグ。戻すと外れる）"));
+    const lb = el("label"), cb = el("input"); cb.type = "checkbox"; cb.checked = boardOnly; cb.id = "board-unused"; cb.onchange = () => { boardOnly = cb.checked; renderBoard(); };
+    lb.append(cb, document.createTextNode("未配置のみ")); th.append(lb);
+    const strip = el("div", "strip");
+    const shown = open.filter(s => !boardOnly || !whereIs(s.id));
+    if (!shown.length) strip.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
+    shown.forEach(s => { const w = whereIs(s.id); strip.append(chipFor(s, { tag: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : "", sub: s.area || "" })); if (w) strip.lastChild.classList.add("used"); });
+    tray.append(th, strip);
+    box.append(tabs, days, tray);
+    showDay(boardDay);
   }
-  $("board-unused").onchange = renderBoard;
   function startDrag(e, id, chip, hd){
     if (e.button != null && e.button > 0) return;
     e.preventDefault();
-    const ghost = chip.cloneNode(true); ghost.classList.remove("used"); ghost.classList.add("ghost"); ghost.style.width = chip.offsetWidth + "px"; document.body.append(ghost);
+    const rect0 = chip.getBoundingClientRect();
+    const ghost = chip.cloneNode(true); ghost.classList.remove("used"); ghost.classList.add("ghost"); ghost.style.width = rect0.width + "px"; document.body.append(ghost);
     chip.classList.add("lifting");
-    const st = dragging = { id, chip, ghost, hd, pid: e.pointerId, x: e.clientX, y: e.clientY, zone: null, idx: 0, raf: 0, ox: e.clientX - chip.getBoundingClientRect().left, oy: e.clientY - chip.getBoundingClientRect().top };
+    const st = dragging = { id, chip, ghost, hd, pid: e.pointerId, x: e.clientX, y: e.clientY, zone: null, idx: 0, raf: 0, ox: e.clientX - rect0.left, oy: e.clientY - rect0.top, tab: null, tabAt: 0 };
     try { hd.setPointerCapture(e.pointerId); } catch {}
     const clear = () => { document.querySelectorAll("#board .over,#board .endins,#board .ins").forEach(n => n.classList.remove("over", "endins", "ins")); };
     const update = () => {
       st.ghost.style.transform = `translate(${st.x - st.ox}px,${st.y - st.oy}px)`;
       clear(); st.zone = null;
-      const z = document.elementFromPoint(st.x, st.y); const dz = z && z.closest && z.closest("#board [data-drop]");
-      if (!dz) return;
-      st.zone = dz; dz.classList.add("over");
-      const chips = [...dz.querySelectorAll(":scope > .dchip")].filter(c => c !== st.chip);
-      let idx = chips.length; for (let n = 0; n < chips.length; n++) { const r = chips[n].getBoundingClientRect(); if (st.y < r.top + r.height / 2) { idx = n; break; } }
+      const z = document.elementFromPoint(st.x, st.y); let dz = z && z.closest && z.closest("#board [data-drop]");
+      if (!dz) { // 枠のすきまに落としそうなときは、近い枠（24px以内）に吸いよせる
+        let best = 24; document.querySelectorAll("#board .dayv:not([hidden]) .dz").forEach(n => { const r = n.getBoundingClientRect(); const d = st.y < r.top ? r.top - st.y : st.y > r.bottom ? st.y - r.bottom : 0; if (st.x >= r.left - 24 && st.x <= r.right + 24 && d < best) { best = d; dz = n; } });
+      }
+      if (!dz) { st.tab = null; return; }
+      dz.classList.add("over");
+      // 日付のタブの上でしばらく止めると、その日に切りかわる
+      if (dz.dataset.drop === "tab") { if (st.tab !== dz) { st.tab = dz; st.tabAt = Date.now(); } else if (Date.now() - st.tabAt > 450 && boardDay !== dz.dataset.date) showDay(dz.dataset.date); return; }
+      st.tab = null; st.zone = dz;
+      const chips = [...dz.querySelectorAll(":scope > .dchip, :scope > .strip > .dchip")].filter(c => c !== st.chip);
+      let idx = chips.length;
+      if (dz.dataset.drop === "slot") {
+        for (let n = 0; n < chips.length; n++) { const r = chips[n].getBoundingClientRect(); if (st.y < r.top + r.height / 2) { idx = n; break; } }
+        if (idx < chips.length) chips[idx].classList.add("ins"); else dz.classList.add("endins");
+      }
       st.idx = idx;
-      if (dz.dataset.drop === "slot") { if (idx < chips.length) chips[idx].classList.add("ins"); else dz.classList.add("endins"); }
     };
-    // 画面の上や下の端に近づいたら、ページを自動でスクロールする
-    const loop = () => { if (dragging !== st) return; const h = innerHeight; if (st.y < 90) scrollBy(0, -Math.ceil((90 - st.y) / 6)); else if (st.y > h - 90) scrollBy(0, Math.ceil((st.y - (h - 90)) / 6)); update(); st.raf = requestAnimationFrame(loop); };
+    // 画面の上の端、または下の登録リストの手前に近づいたら、ページを自動でスクロールする
+    const loop = () => {
+      if (dragging !== st) return;
+      const tr = $("board-tray"), floor = tr ? tr.getBoundingClientRect().top : innerHeight - 90;
+      if (st.y < 90) scrollBy(0, -Math.ceil((90 - st.y) / 6)); else if (st.y > floor - 70 && st.y < floor) scrollBy(0, Math.ceil((st.y - (floor - 70)) / 6));
+      update(); st.raf = requestAnimationFrame(loop);
+    };
     const move = ev => { if (ev.pointerId !== st.pid) return; st.x = ev.clientX; st.y = ev.clientY; };
     const end = ev => {
       if (ev.pointerId !== st.pid) return;
