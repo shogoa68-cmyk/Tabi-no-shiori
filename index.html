@@ -1405,8 +1405,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const open = sorted().filter(s => !s.done);
     const placed = open.filter(s => whereIs(s.id)).length;
     $("board-sum").textContent = list.length ? `（${placed}/${open.length}か所を入れた）` : "";
+    const keepY = scrollY; // 作りなおしても、見ている位置から動かない
     box.textContent = "";
-    if (!list.length) { box.append(el("p", "note", "「日程と拠点」で旅の開始日と終了日を入れると、日ごとの枠ができます。")); return; }
+    if (!list.length) { box.append(el("p", "note", "旅の開始日と終了日を入れると、日ごとの枠ができます。")); return; }
     if (!list.includes(boardDay)) { const ad = activeDay(); boardDay = ad ? ad.date : list[0]; }
     const dock = document.querySelector(".dock"); if (dock) box.style.setProperty("--dock-h", dock.offsetHeight + "px");
     // 日付のタブ
@@ -1459,6 +1460,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     tray.append(th, strip);
     box.append(tabs, days, tray);
     showDay(boardDay);
+    if (Math.abs(scrollY - keepY) > 0) scrollTo(0, keepY);
   }
   function startDrag(e, id, chip, hd){
     if (e.button != null && e.button > 0) return;
@@ -1490,16 +1492,24 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       st.idx = idx;
     };
     // 画面の上の端、または下の登録リストの手前に近づいたら、ページを自動でスクロールする
+    // ただし、通りすぎるだけでは動かさない（端や手前に0.4秒とどまったときだけ）
+    st.dir = 0; st.dirAt = 0;
     const loop = () => {
       if (dragging !== st) return;
       const tr = $("board-tray"), floor = tr ? tr.getBoundingClientRect().top : innerHeight - 90;
-      if (st.y < 90) scrollBy(0, -Math.ceil((90 - st.y) / 6)); else if (st.y > floor - 70 && st.y < floor) scrollBy(0, Math.ceil((st.y - (floor - 70)) / 6));
+      const dir = st.y < 70 ? -1 : (st.y > floor - 60 && st.y < floor) ? 1 : 0, now = Date.now();
+      if (dir !== st.dir) { st.dir = dir; st.dirAt = now; }
+      if (dir && now - st.dirAt > 400) scrollBy(0, dir < 0 ? -Math.ceil((70 - st.y) / 8 + 1) : Math.ceil((st.y - (floor - 60)) / 8 + 1));
       update(); st.raf = requestAnimationFrame(loop);
     };
+    // iPhone：ドラッグ中は、指の動きでページが動かないようにする
+    const noScroll = ev => ev.preventDefault();
+    document.addEventListener("touchmove", noScroll, { passive: false });
     const move = ev => { if (ev.pointerId !== st.pid) return; st.x = ev.clientX; st.y = ev.clientY; };
     const end = ev => {
       if (ev.pointerId !== st.pid) return;
       hd.removeEventListener("pointermove", move); hd.removeEventListener("pointerup", end); hd.removeEventListener("pointercancel", end);
+      document.removeEventListener("touchmove", noScroll);
       cancelAnimationFrame(st.raf); update(); clear();
       const zone = ev.type === "pointercancel" ? null : st.zone, idx = st.idx;
       st.ghost.remove(); st.chip.classList.remove("lifting"); dragging = null;
