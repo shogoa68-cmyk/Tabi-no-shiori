@@ -452,7 +452,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
           <span class="note" style="color:var(--ink);font-weight:700">手で登録する</span>
           <div class="grid">
-            <label>種類<select id="hub-kind"><option>駅</option><option>バス停</option><option>空港</option><option>港</option></select></label>
+            <label>種類<select id="hub-kind"><option value="駅">🚉 駅</option><option value="バス停">🚏 バス停</option><option value="空港">🛫 空港</option><option value="港">⚓ 港</option></select></label>
             <label>名前<input id="hub-name" maxlength="60" placeholder="例：京都駅"></label>
           </div>
           <label>住所（わかれば）<input id="hub-addr" maxlength="120" placeholder="空なら名前から位置を調べます"></label>
@@ -494,7 +494,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           <label>営業時間<input id="s-hours" maxlength="40" placeholder="例：9:00〜17:00"></label>
           <label>定休日<input id="s-closed" maxlength="40" placeholder="例：水曜"></label>
           <label>種類
-            <select id="s-kind"><option>観光</option><option>ごはん</option><option>カフェ</option><option>買い物</option><option>体験</option></select></label>
+            <select id="s-kind"><option value="観光">🏯 観光</option><option value="ごはん">🍽️ ごはん</option><option value="カフェ">☕ カフェ</option><option value="買い物">🛍️ 買い物</option><option value="体験">🎡 体験</option></select></label>
           <label>行きたい時間帯<input id="s-when" maxlength="30" placeholder="例：夕方、ランチに"></label>
         </div>
         <label>住所<input id="s-address" maxlength="120" placeholder="例：京都府京都市伏見区深草藪之内町68"></label>
@@ -1257,7 +1257,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         chk.onchange = () => { s.done = chk.checked; save(); cloudMark(s.id, "up"); renderSpots(); toast(s.done ? `「${s.name}」を行った所にしました` : "未訪問に戻しました"); }; }
       const body = el("div","body");
       body.append(el("div","stars", "★".repeat(s.prio) + "☆".repeat(3 - s.prio)), el("div","nm", s.name));
-      const meta = [s.kind, s.area, s.stay ? "滞在 " + stayText(s.stay) : "", s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.when].filter(Boolean).join("・");
+      const meta = [iconOf(SPOT_ICON, s.kind), s.area, s.stay ? "滞在 " + stayText(s.stay) : "", s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.when].filter(Boolean).join("・");
       if (meta) body.append(el("div","meta", meta));
       if (s.memo) body.append(el("div","meta", s.memo));
       const dt = distText(s); if (dt) body.append(el("div","meta", dt + "（直線）"));
@@ -1470,7 +1470,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     return box;
   }
   // ---- 絶対に外せない移動（新幹線・飛行機など。拠点より上の決まりごと。日ごと plan.days[日付].moves に入れ、日程といっしょに同期する） ----
-  const MOVE_KINDS = ["新幹線", "飛行機", "特急・電車", "フェリー", "高速バス", "その他"];
+  const MOVE_KINDS = ["新幹線", "飛行機", "特急・電車", "フェリー", "高速バス", "その他移動手段"];
+  // 種類ごとの絵文字（画面に出すだけ。保存するのは種類の名前だけ。お願い文には入れない）。ふるい「その他」も読める
+  const MOVE_ICON = { "新幹線": "🚄", "飛行機": "✈️", "特急・電車": "🚃", "フェリー": "⛴️", "高速バス": "🚌", "その他移動手段": "🧭", "その他": "🧭" };
+  const SPOT_ICON = { "観光": "🏯", "ごはん": "🍽️", "カフェ": "☕", "買い物": "🛍️", "体験": "🎡" };
+  const HUB_ICON = { "駅": "🚉", "バス停": "🚏", "空港": "🛫", "港": "⚓" };
+  const iconOf = (map, k) => k ? (map[k] ? map[k] + " " : "") + k : "";
+  const kindLabel = k => k ? (MOVE_ICON[k] ? MOVE_ICON[k] + " " : "") + k : "";
   const movesOf = k => { const m = (state.plan.days[k] || {}).moves; return Array.isArray(m) ? m.filter(x => x && typeof x === "object" && (x.from || x.to || x.dep)).slice().sort((a, b) => (a.dep || "99:99").localeCompare(b.dep || "99:99")) : []; };
   const moveText = m => `${m.dep || "時刻未定"}発${m.arr ? "→" + m.arr + "着" : ""}　${m.from || "?"}→${m.to || "?"}（${m.kind || "移動"}${m.name ? " " + m.name : ""}）${m.memo ? "　" + m.memo : ""}`;
   // 乗り場に着いておきたい余裕（目安）
@@ -1515,7 +1521,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
   function moveForm(k, mv, done){
     const form = el("div", "stack"); form.style.gap = "6px"; form.dataset.moveForm = k;
-    const kind = el("select"); kind.className = "mv-kind"; kind.setAttribute("aria-label", "移動の種類"); MOVE_KINDS.forEach(t => { const o = document.createElement("option"); o.textContent = t; kind.append(o); });
+    const kind = el("select"); kind.className = "mv-kind"; kind.setAttribute("aria-label", "移動の種類"); (mv && mv.kind && !MOVE_KINDS.includes(mv.kind) ? MOVE_KINDS.concat(mv.kind) : MOVE_KINDS).forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = kindLabel(t); kind.append(o); });
     const name = mkInput("mv-name", "列車や便の名前", 40); name.placeholder = "列車・便の名前（例：のぞみ12号、JAL123）";
     const from = mkInput("mv-from", "出発地", 40); from.placeholder = "出発地（例：東京駅、羽田空港）";
     const to = mkInput("mv-to", "到着地", 40); to.placeholder = "到着地（例：京都駅、伊丹空港）";
@@ -1810,7 +1816,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const moveNode = ev => {
         const m = ev.m, n = el("div", "node mvnode"), t = el("div", "tkt"); t.dataset.move = m.id;
         t.append(el("span", "tm", fmtHM(ev.start)));
-        const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${m.kind || ""}${m.name ? "　" + m.name : ""}`)); t.append(w);
+        const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${kindLabel(m.kind)}${m.name ? "　" + m.name : ""}`)); t.append(w);
         const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dtext}　外せない移動`, moveForm(k, m, closeSheet)); t.append(ed);
         n.append(t); warnEls(ev).forEach(x => n.append(x)); return n;
       };
@@ -2283,7 +2289,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const base = ad && (hasBase(ad.am) ? ad.am : hasBase(ad.pm) ? ad.pm : null);
     hubs().forEach(h => {
       const wrap = el("div", "stack"); wrap.style.gap = "2px";
-      const r = el("div", "mem"), left = el("span", null, `${h.kind}　${h.name}`);
+      const r = el("div", "mem"), left = el("span", null, `${iconOf(HUB_ICON, h.kind)}　${h.name}`);
       const d = distText(h, ad);
       left.append(el("span", "note", d ? `　${d}（直線）` : (hasPos(h) ? "" : "　位置はまだ分かりません")));
       const del = el("button", "link", "削除"); del.type = "button";
@@ -2369,7 +2375,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   const hubErr = res => `探せませんでした（${res.err}）。電波を確認して、少し待ってからもう一度ためしてください。それでもだめなときは、下の「手で登録する」から入れてください。`;
   function foundRow(x, onAdd, star){
-    const r = el("div", "mem"), left = el("span", null, `${x.kind}　${x.name}`);
+    const r = el("div", "mem"), left = el("span", null, `${iconOf(HUB_ICON, x.kind)}　${x.name}`);
     left.append(el("span", "note", `　${fmtKm(x.d)}${walkText(x.d)}`));
     if (star) { const s = el("span", "note", "　おすすめ"); s.style.color = "var(--star)"; s.style.fontWeight = "700"; left.append(s); }
     left.style.minWidth = "0";
