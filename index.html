@@ -44,6 +44,23 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:var(--accent);color:var(--paper)}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .btn.small{font-size:13px;padding:6px 11px}
+.topbar{display:flex;gap:10px;align-items:flex-start}
+.menubtn{flex:none;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;cursor:pointer;padding:0}
+.menubtn span{display:block;width:20px;height:2.5px;border-radius:2px;background:var(--ink)}
+.subbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;background:var(--bg);padding:6px 0;margin-top:-6px}
+.subbar b{flex:1;min-width:0;font-family:var(--display);font-size:16px;text-align:center;line-height:1.3}
+.backbtn{font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap;padding:10px 4px}
+.menu{position:fixed;inset:0;z-index:45}
+.menu-bg{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.menu-panel{position:absolute;top:calc(env(safe-area-inset-top,0px) + 56px);right:12px;width:min(330px,calc(100vw - 24px));max-height:calc(100dvh - 80px);overflow:auto;background:var(--paper);border-radius:16px;padding:8px;display:flex;flex-direction:column;gap:2px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.menu-panel button{font:inherit;text-align:left;display:flex;justify-content:space-between;gap:8px;align-items:center;border:0;background:transparent;color:var(--ink);padding:13px 12px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+.menu-panel button:active,.menu-panel button.cur{background:var(--accent-soft)}
+.menu-panel .cnt{color:var(--muted);font-size:12.5px;font-weight:400}
+.menu-panel hr{border:0;border-top:1px solid var(--line);margin:4px 8px}
+body[data-view=main] [data-v]{display:none!important}
+body:not([data-view=main]):not([data-view=all]) .vmain{display:none!important}
+body[data-view=spots] [data-v]:not([data-v=spots]),body[data-view=days] [data-v]:not([data-v=days]),body[data-view=hubs] [data-v]:not([data-v=hubs]),body[data-view=map] [data-v]:not([data-v=map]),body[data-view=routes] [data-v]:not([data-v=routes]),body[data-view=settings] [data-v]:not([data-v=settings]),body[data-view=edit] [data-v]:not([data-v=edit]){display:none!important}
+body:not([data-view=main]):not([data-view=all]) details.card>summary{display:none}
 .seg{display:flex;gap:4px;background:var(--line);border-radius:14px;padding:4px}
 .seg button{flex:1;font:inherit;font-size:14px;font-weight:700;border:0;background:transparent;color:var(--muted);border-radius:11px;padding:9px 6px;cursor:pointer}
 .seg button[aria-selected=true]{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
@@ -109,7 +126,17 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 .sheet{position:fixed;inset:0;z-index:40;display:flex;justify-content:center;align-items:flex-start;padding:max(10px,env(safe-area-inset-top,0px)) 10px 10px}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
 .sheet-body{position:relative;width:100%;max-width:560px;max-height:calc(100dvh - 24px);overflow:auto;background:var(--paper);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
-.mealbtn{font-size:13px;font-weight:700}
+.mealbtn,.basebtn{font-size:13px;font-weight:700}
+.tm{display:inline-block;min-width:50px;margin-right:4px;font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.tm.fx{color:var(--ink);font-weight:500}
+.pillbtn{font:inherit;font-size:12.5px;font-weight:700;border:1.5px dashed var(--accent);background:transparent;color:var(--accent);border-radius:99px;padding:3px 11px;cursor:pointer;line-height:1.5}
+.pillbtn.exp{border-style:solid;background:var(--accent);color:#fff}
+.dayact{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.daywarn{background:var(--warn-soft);border:1.5px solid var(--star);border-radius:12px;padding:8px 12px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.daywarn ul{margin:0;padding-left:18px}
+.warn{color:var(--star);font-size:12.5px;line-height:1.5;margin-top:2px}
+.node .tkt{margin:0}
+.dchip .sub.tmr{color:var(--ink);font-weight:700}
 .mlink{display:inline-block;margin-top:2px;font-size:11.5px;font-weight:700;color:var(--accent)}
 .node .mlink{margin:0 0 0 10px;font-size:13px}
 .leg{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 10px;font-size:11.5px;color:var(--muted);line-height:1.5;padding:1px 0}
@@ -211,20 +238,28 @@ details.rt[open] > summary{margin-bottom:8px}
 pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:260px;overflow:auto;margin:0;user-select:all}
 </style>
 </head>
-<body>
+<body data-view="main">
 <div class="wrap">
-  <header class="stack" style="gap:4px">
-    <div class="eyebrow">いまから旅ナビ</div>
-    <h1 style="font-size:24px" id="h-title">旅の計画をつくろう</h1>
-    <p class="note" id="h-sub" style="margin:0">行きたい場所を集めて、日ごとに並べます。くわしいことは、あとで。</p>
-  </header>
-  <div class="seg" id="mode-seg" role="tablist" aria-label="画面の切りかえ">
+  <div class="topbar vmain">
+    <header class="stack" style="gap:4px;flex:1;min-width:0">
+      <div class="eyebrow">いまから旅ナビ</div>
+      <h1 style="font-size:24px" id="h-title">旅の計画をつくろう</h1>
+      <p class="note" id="h-sub" style="margin:0">行きたい場所を集めて、日ごとに並べます。くわしいことは、あとで。</p>
+    </header>
+    <button class="menubtn" id="menu-btn" type="button" aria-label="メニューをひらく" aria-haspopup="true"><span></span><span></span><span></span></button>
+  </div>
+  <div class="subbar" id="subbar" hidden>
+    <button class="link backbtn" id="sub-back" type="button">← もどる</button>
+    <b id="sub-title"></b>
+    <button class="menubtn" id="menu-btn2" type="button" aria-label="メニューをひらく" aria-haspopup="true"><span></span><span></span><span></span></button>
+  </div>
+  <div class="seg vmain" id="mode-seg" role="tablist" aria-label="画面の切りかえ">
     <button type="button" role="tab" data-mode="plan">計画する</button>
     <button type="button" role="tab" data-mode="now">いま使う（旅の途中）</button>
   </div>
 
   <!-- 旅への招待 -->
-  <section class="card stack guard" id="join-card" hidden aria-labelledby="h-join">
+  <section class="card stack guard vmain" id="join-card" hidden aria-labelledby="h-join">
     <h2 id="h-join" style="font-size:16px">旅への招待</h2>
     <p class="note" style="color:var(--ink)" id="join-text"></p>
     <div class="row">
@@ -235,7 +270,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 
   <!-- データを守る案内（ホーム画面に追加・バックアップ） -->
-  <section class="card stack guard" id="guard" hidden aria-labelledby="h-guard">
+  <section class="card stack guard vmain" id="guard" hidden aria-labelledby="h-guard">
     <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><h2 id="h-guard" style="font-size:16px">リストが消えないように</h2><button class="link" type="button" id="guard-close">あとで</button></div>
     <p class="note" style="color:var(--ink)">いまのリストは、このスマホの中にだけ保存されています。Googleでログインすると、クラウドにも保存されて、スマホのデータが消えても元に戻せます。</p>
     <div class="row"><button class="btn small" type="button" id="guard-login">Googleでログイン</button></div>
@@ -247,7 +282,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 
   <!-- いま -->
-  <section class="card now only-now" aria-label="いまの状況">
+  <section class="card now only-now vmain" aria-label="いまの状況">
     <div class="clock"><span class="t" id="clock">--:--</span><span class="d" id="date"></span></div>
     <div class="note" id="day-line" hidden style="color:var(--ink)"></div>
     <div class="here">
@@ -281,8 +316,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 
   <!-- 行きたい場所 -->
   <section class="stack" aria-labelledby="h-spots" id="main-sec">
-    <nav class="steps only-plan" id="steps" aria-label="進めかた"></nav>
-    <section class="card stack qa only-plan" id="qa-card" aria-labelledby="h-qa">
+    <nav class="steps only-plan vmain" id="steps" aria-label="進めかた"></nav>
+    <section class="card stack qa only-plan vmain" id="qa-card" aria-labelledby="h-qa">
       <h2 id="h-qa" style="font-size:17px">1　行きたい場所を集める</h2>
       <p class="note" style="margin:0">Googleマップで場所を開き、「共有」でコピーしたリンクを貼るだけ。名前や住所は自動で入ります。まとめて入れたいときは、1つずつ続けて貼ってください。</p>
       <div class="row" style="flex-wrap:nowrap">
@@ -295,11 +330,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       </div>
       <span class="msg" id="qa-msg" style="color:var(--accent)"></span>
     </section>
-    <div class="row" style="justify-content:space-between" id="spots-head">
+    <div class="row" style="justify-content:space-between" id="spots-head" data-v="spots">
       <h2 id="h-spots">行きたい場所のリスト <span class="note" id="count"></span></h2>
       <label class="row" style="flex-direction:row;gap:6px;font-size:13px"><input type="checkbox" id="show-done" style="width:auto"> 行った所も表示</label>
     </div>
-    <section class="card stack" id="trip-card" hidden aria-label="旅の切りかえ" style="gap:8px">
+    <section class="card stack vmain" id="trip-card" hidden aria-label="旅の切りかえ" style="gap:8px">
       <div class="row" style="flex-wrap:nowrap">
         <select id="trip-select" aria-label="旅を選ぶ" style="flex:1"></select>
         <button class="btn ghost small" type="button" id="trip-new">新しい旅</button>
@@ -319,7 +354,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <div class="stack" id="trip-members" hidden style="gap:4px"></div>
       <p class="note" id="trip-note"></p>
     </section>
-    <details class="card" id="plan-card">
+    <details class="card" id="plan-card" data-v="days">
       <summary>3　日ごとの詳細（拠点・外せない移動・食事） <span class="note" id="plan-sum"></span></summary>
       <div class="stack">
         <p class="note">日ごとに、拠点（宿・駅・空港など）、絶対に外せない移動（新幹線・飛行機）、食事の希望を、わかるところから入れます。旅の日付は「2　日ごとに割りふる」の中で入れます。朝と夜で拠点が別のときは、両方入れてください。入れなかった日は、前の日の夜の拠点（なければ朝の拠点）と同じになります。</p>
@@ -333,7 +368,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <p class="note" id="plan-note"></p>
       </div>
     </details>
-    <section class="card stack only-plan" id="board-card" aria-labelledby="h-board">
+    <section class="card stack only-plan vmain" id="board-card" aria-labelledby="h-board">
       <h2 id="h-board" style="font-size:17px">2　日ごとに割りふる <span class="note" id="board-sum"></span></h2>
       <div class="grid" id="dates-box">
         <label>旅の開始日<input type="date" id="plan-start"></label>
@@ -342,7 +377,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <p class="note" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）へ動かして入れます。入れたカードも、点々をつかんで動かせます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
       <div id="board"></div>
     </section>
-    <details class="card" id="hub-card">
+    <details class="card" id="hub-card" data-v="hubs">
       <summary>交通の拠点（駅・バス停など） <span class="note" id="hub-sum"></span></summary>
       <div class="stack">
         <p class="note">ルートを考えてもらうときに使う、駅・バス停・空港・港を登録します。お願い文に入るので、Claudeが「この駅から乗る」「この駅で降りる」を考えて、ルートを組めます。自動で探せるのは駅とバス停です（空港・港は手で登録してください）。</p>
@@ -376,10 +411,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         </div>
       </div>
     </details>
-    <p class="note only-plan" id="spots-note" style="margin:0">営業時間・滞在時間・メモなどの詳細は、あとで「編集」から入れられます。まだ入っていない項目は、カードに印が出ます。</p>
-    <div class="spots" id="spots"></div>
+    <p class="note only-plan" data-v="spots" id="spots-note" style="margin:0">営業時間・滞在時間・メモなどの詳細は、あとで「編集」から入れられます。まだ入っていない項目は、カードに印が出ます。</p>
+    <div class="spots" id="spots" data-v="spots"></div>
 
-    <details class="card" id="add-box">
+    <details class="card" id="add-box" data-v="edit">
       <summary id="add-title">場所を詳しく入れる・編集する</summary>
       <form id="spot-form" class="stack">
         <div class="stack" style="gap:6px">
@@ -418,7 +453,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 
   <!-- 距離マップ（拠点と行きたい場所の位置関係） -->
-  <details class="card" id="map-card" hidden>
+  <details class="card" id="map-card" data-v="map" hidden>
     <summary>距離マップ <span class="note" id="map-sum"></span></summary>
     <div class="stack">
       <div class="row" id="map-focus" hidden>
@@ -441,7 +476,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </details>
 
   <!-- 保存したルート（ログイン中・共有の表が使えるときだけ） -->
-  <details class="card" id="routes-card" hidden>
+  <details class="card" id="routes-card" data-v="routes" hidden>
     <summary>保存したルート <span class="note" id="routes-count"></span></summary>
     <div class="stack">
       <p class="note">Claudeが返したルートを貼り付けて保存すると、この旅のメンバーみんなで見られます。</p>
@@ -453,7 +488,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </details>
 
   <!-- 設定・その他 -->
-  <details class="card">
+  <details class="card" id="settings-card" data-v="settings">
     <summary>旅の設定・バックアップ</summary>
     <div class="stack">
       <label>旅のメモ（Claudeに毎回伝えたいこと）<textarea id="trip-memo" maxlength="400" placeholder="例：母と2人旅。階段が多い所は少なめに。ICOCA持ち。お昼は和食がいい"></textarea></label>
@@ -488,7 +523,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </details>
 
   <!-- 送る内容の確認 -->
-  <section class="card stack" id="preview" hidden aria-label="Claudeに送る内容">
+  <section class="card stack vmain" id="preview" hidden aria-label="Claudeに送る内容">
     <div class="row" style="justify-content:space-between"><h2>Claudeに送る内容</h2><button class="link" type="button" id="pv-close">閉じる</button></div>
     <a class="btn go" id="pv-open" href="https://claude.ai/new" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">コピーしてClaudeを開く</a>
     <p class="note" id="pv-hint">Claudeが開いたら、入力欄に文が入っていればそのまま送信。空なら長押しで貼り付けて送信してください。</p>
@@ -497,7 +532,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 </div>
 
-<div class="dock only-now">
+<div class="dock only-now vmain">
   <div class="in">
     <div class="quick" id="quick">
       <button type="button" data-q="day">1日の予定を組む</button>
@@ -510,6 +545,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     </div>
     <button class="btn go" type="button" id="ask">いまからのルートを聞く</button>
   </div>
+</div>
+<div class="menu" id="menu" hidden>
+  <div class="menu-bg" id="menu-bg"></div>
+  <nav class="menu-panel" id="menu-panel" aria-label="メニュー"></nav>
 </div>
 <div class="sheet" id="meal-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="ms-title">
   <div class="sheet-bg" id="ms-bg"></div>
@@ -627,8 +666,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const JOIN_KEY = "tabi-navi-join";
   const getPendingJoin = () => { try { return localStorage.getItem(JOIN_KEY) || ""; } catch { return ""; } };
   const setPendingJoin = c => { try { c ? localStorage.setItem(JOIN_KEY, c) : localStorage.removeItem(JOIN_KEY); } catch {} };
+  // アドレスから、使いおわった指定（?join=… や ?code=…）だけを消す（?mode=now など、ほかの指定は残す）
+  const stripParams = (...names) => { const u = new URL(location.href); names.forEach(n => u.searchParams.delete(n)); history.replaceState(null, "", u.pathname + u.search + u.hash); };
   { const jp = new URLSearchParams(location.search).get("join");
-    if (jp && /^[0-9a-f]{32}$/i.test(jp)) { setPendingJoin(jp.toLowerCase()); history.replaceState(null, "", location.pathname); } }
+    if (jp && /^[0-9a-f]{32}$/i.test(jp)) { setPendingJoin(jp.toLowerCase()); stripParams("join"); } }
 
   // 変更の印をつける（ログインしていなくてもつけておき、ログインしたら送る）
   function cloudMark(id, op){ sync.dirty[id] = op; saveSync(); scheduleSync(); }
@@ -1014,7 +1055,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     sb = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
     sb.auth.onAuthStateChange((_ev, s) => {
       // ログインから戻ってきたときの ?code=… をURLから消す
-      if (s && new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname);
+      if (s && new URLSearchParams(location.search).has("code")) stripParams("code");
       const was = session && session.user.id; session = s;
       if (s && was !== s.user.id) scheduleSync(0); else { renderCloud(); renderSpots(); }
     });
@@ -1342,16 +1383,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (day.slots) { Object.keys(day.slots).forEach(n => { if (!Array.isArray(day.slots[n]) || !day.slots[n].length) delete day.slots[n]; }); if (!Object.keys(day.slots).length) delete day.slots; }
     if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots) delete state.plan.days[k];
   }
-  function moveEditor(k){
-    const wrap = el("div", "stack"); wrap.style.gap = "8px"; wrap.dataset.moves = k;
-    wrap.append(el("span", "note", "絶対に外せない移動（新幹線・飛行機など。拠点より優先して、ルートの提案に伝えます）"));
-    const day = () => state.plan.days[k] || {};
-    movesOf(k).forEach(m => {
-      const r = el("div", "mem"); r.append(el("span", null, moveText(m)));
-      const del = el("button", "link", "削除"); del.type = "button";
-      del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== m.id); pruneDay(k); changePlan(); renderPlan(); };
-      r.append(del); wrap.append(r);
-    });
+  // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
+  function moveForm(k, mv, done){
     const form = el("div", "stack"); form.style.gap = "6px"; form.dataset.moveForm = k;
     const kind = el("select"); kind.className = "mv-kind"; kind.setAttribute("aria-label", "移動の種類"); MOVE_KINDS.forEach(t => { const o = document.createElement("option"); o.textContent = t; kind.append(o); });
     const name = mkInput("mv-name", "列車や便の名前", 40); name.placeholder = "列車・便の名前（例：のぞみ12号、JAL123）";
@@ -1360,14 +1393,33 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const dep = mkInput("mv-dep", "出発時刻", 5); dep.type = "time"; const arr = mkInput("mv-arr", "到着時刻", 5); arr.type = "time";
     const dl = el("label", null, "出発時刻"); dl.append(dep); const al = el("label", null, "到着時刻（わかれば）"); al.append(arr);
     const memo = mkInput("mv-memo", "メモ", 60); memo.placeholder = "メモ（座席・予約番号など。あれば）";
-    const msg = el("span", "msg"); const add = el("button", "btn small", "この移動を追加"); add.type = "button"; add.style.alignSelf = "flex-start";
+    if (mv) { kind.value = mv.kind || kind.value; name.value = mv.name || ""; from.value = mv.from || ""; to.value = mv.to || ""; dep.value = mv.dep || ""; arr.value = mv.arr || ""; memo.value = mv.memo || ""; }
+    const msg = el("span", "msg"); const add = el("button", "btn small", mv ? "保存する" : "この移動を追加"); add.type = "button"; add.style.alignSelf = "flex-start";
     add.onclick = () => {
       if (!dep.value || !from.value.trim() || !to.value.trim()) { msg.textContent = "出発時刻・出発地・到着地を入れてください"; return; }
       const d = state.plan.days[k] = state.plan.days[k] || {}; d.moves = Array.isArray(d.moves) ? d.moves : [];
-      d.moves.push({ id: newId(), kind: kind.value, name: name.value.trim(), from: from.value.trim(), to: to.value.trim(), dep: dep.value, arr: arr.value, memo: memo.value.trim() });
-      changePlan(); renderPlan();
+      const v = { kind: kind.value, name: name.value.trim(), from: from.value.trim(), to: to.value.trim(), dep: dep.value, arr: arr.value, memo: memo.value.trim() };
+      if (mv) { const t = d.moves.find(x => x.id === mv.id); if (t) Object.assign(t, v); else d.moves.push(Object.assign({ id: mv.id }, v)); }
+      else d.moves.push(Object.assign({ id: newId() }, v));
+      changePlan(); if (done) done(); else renderPlan();
     };
-    form.append(kind, name, from, to, dl, al, memo, add, msg); wrap.append(form);
+    form.append(kind, name, from, to, dl, al, memo, add);
+    if (mv) { const del = el("button", "link", "この移動を削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
+      del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== mv.id); pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
+    form.append(msg);
+    return form;
+  }
+  function moveEditor(k){
+    const wrap = el("div", "stack"); wrap.style.gap = "8px"; wrap.dataset.moves = k;
+    wrap.append(el("span", "note", "絶対に外せない移動（新幹線・飛行機など。拠点より優先して、ルートの提案に伝えます）"));
+    movesOf(k).forEach(m => {
+      const r = el("div", "mem"); r.append(el("span", null, moveText(m)));
+      const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dayLabel(k, dayList().indexOf(k))}　外せない移動`, moveForm(k, m, closeSheet));
+      const del = el("button", "link", "削除"); del.type = "button";
+      del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== m.id); pruneDay(k); changePlan(); renderPlan(); };
+      const ops = el("span"); ops.style.display = "flex"; ops.style.gap = "10px"; ops.append(ed, del); r.append(ops); wrap.append(r);
+    });
+    wrap.append(moveForm(k, null, null));
     return wrap;
   }
   // ---- 日ごとの予定（ドラッグで組む）：plan.days[日付].slots = { am: [場所id], pm: [...], ev: [...] }（午前・午後・夜。入れた順番を保つ） ----
@@ -1429,6 +1481,49 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     return { d, how, min };
   }
   const travelText = t => `直線${fmtKm(t.d)}・${t.how}で約${t.min >= 60 ? Math.floor(t.min / 60) + "時間" + (t.min % 60 ? t.min % 60 + "分" : "") : t.min + "分"}（目安）`;
+  // ---- 1日の時刻の計算（上から下へ時間が流れる。決めた時刻はそのまま、決めていないところは目安で順に計算する） ----
+  const hm = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const fmtHM = n => `${pad(Math.floor(n / 60) % 24)}:${pad(Math.round(n) % 60)}`;
+  const stayMin = s => s.stay || (s.kind === "カフェ" ? 45 : 60); // 滞在時間（入れていなければ、1時間の目安）
+  const MEAL_DUR = { b: 45, l: 60, d: 90 };
+  function daySchedule(k, da){
+    const st = hm(($("start-time") && $("start-time").value) || ""), stT = st == null ? 540 : st;
+    const defT = { b: Math.max(360, stT - 60), l: 720, d: 1110 };
+    const top = [];
+    MEALS.forEach(([key, label]) => { const m = mealsOf(k)[key], ut = hasMeal(m) ? hm(m.time) : null; top.push({ type: "meal", key, label, m, t: ut != null ? ut : defT[key], fixed: ut != null, ord: 0 }); });
+    movesOf(k).forEach(m => { const dep = hm(m.dep); if (dep != null) top.push({ type: "move", m, t: dep, ord: 1 }); });
+    top.sort((a, b) => a.t - b.t || a.ord - b.ord);
+    const evs = [], warns = [];
+    const add = (ev, w) => { if (w) { ev.warns = [w]; warns.push(w); } evs.push(ev); };
+    let cursor = null, pos = hasPos(da.am) ? da.am : null;
+    evs.push({ type: "base", slot: "am", base: da.am });
+    for (const it of top) {
+      if (it.type === "move") {
+        const dep = it.t; let arr = hm(it.m.arr); if (arr == null) arr = dep + 60; if (arr < dep) arr += 1440;
+        const mg = it.m.kind === "飛行機" ? 60 : 30;
+        const w = cursor != null && cursor + mg > dep ? `「${it.m.from}→${it.m.to}」の出発（${fmtHM(dep)}）の${mg}分前までに乗り場へ着けない目安です（前の予定が${fmtHM(cursor)}ごろまでかかります）。` : "";
+        add({ type: "move", m: it.m, start: dep, end: arr }, w);
+        cursor = Math.max(cursor == null ? 0 : cursor, arr); pos = null; // 移動のあとの場所は、わからない
+      } else {
+        const pt = mealPoint(k, it.key), tr = pos && pt ? travel(pos, pt).min : 0;
+        let start = it.t, w = "";
+        if (it.fixed) { if (cursor != null && cursor + tr > it.t) w = `${it.label}（${fmtHM(it.t)}）に間に合わない目安です（前の予定が${fmtHM(cursor + tr)}ごろまでかかります）。`; }
+        else start = Math.max(it.t, cursor == null ? 0 : cursor + tr);
+        const end = start + MEAL_DUR[it.key];
+        add({ type: "meal", key: it.key, label: it.label, m: it.m, start, end, fixed: it.fixed }, w);
+        cursor = end; if (pt) pos = pt;
+        const sl = { b: "am", l: "pm", d: "ev" }[it.key], items = [];
+        slotIds(k, sl).forEach(id => {
+          const s = spotById(id), tr2 = pos && hasPos(s) ? travel(pos, s).min : 0, a = cursor + tr2, e = a + stayMin(s);
+          items.push({ id, s, start: a, end: e }); cursor = e; if (hasPos(s)) pos = s;
+        });
+        evs.push({ type: "slot", sl, items });
+      }
+    }
+    let arrive = cursor; if (cursor != null && pos && hasPos(da.pm)) arrive = cursor + travel(pos, da.pm).min;
+    add({ type: "base", slot: "pm", base: da.pm, arrive }, arrive != null && arrive > 1380 ? `夜の拠点に着くのが${fmtHM(arrive)}ごろになる目安です。` : "");
+    return { evs, warns };
+  }
   // 2点の経路検索へのリンク（Googleマップ／Appleマップ）
   function routeLinks(a, b, how){
     const g = `https://www.google.com/maps/dir/?api=1&origin=${a.lat},${a.lng}&destination=${b.lat},${b.lng}&travelmode=${how === "徒歩" ? "walking" : how === "車" ? "driving" : how === "自転車" ? "bicycling" : "transit"}`;
@@ -1452,6 +1547,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const handle = () => { const hd = el("span", "hd"); hd.setAttribute("role", "button"); hd.setAttribute("aria-label", `${s.name}をドラッグ`); hd.onpointerdown = e => startDrag(e, s.id, c, hd); hd.addEventListener("touchstart", e => e.preventDefault(), { passive: false }); hd.oncontextmenu = e => e.preventDefault(); return hd; };
     if (opt.num) c.classList.add("pl");
     const nm = el("span", "nm", `${"★".repeat(s.prio)} ${s.name}`);
+    if (opt.time) nm.append(el("span", "sub tmr", opt.time));
     if (opt.sub) nm.append(el("span", "sub", opt.sub));
     if (opt.tag) { nm.append(document.createElement("br")); nm.append(el("span", "tag", opt.tag)); }
     nm.append(mapLink(spotMapUrl(s), "Googleマップ")); // 登録したGoogleマップのリンク（なければ名前で検索）
@@ -1492,37 +1588,62 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     // 日ごとの画面
     const days = el("div");
     list.forEach((k, i) => {
-      const dv = el("div", "dayv"); dv.dataset.date = k; const da = dayAt(list, i);
-      // 朝の拠点 → 夜の拠点
-      const rt = el("div", "route");
-      const arrow = sv("svg", { viewBox: "0 0 100 14", preserveAspectRatio: "none", "aria-hidden": "true" }, "");
-      arrow.append(sv("line", { x1: 0, y1: 7, x2: 98, y2: 7 }), sv("path", { d: "M90 2 L98 7 L90 12" }));
-      rt.append(el("span", "pin", `朝　${da.am ? baseName(da.am) : "未設定"}`), arrow, el("span", "pin", `夜　${da.pm ? baseName(da.pm) : "未設定"}`));
-      dv.append(rt);
-      movesOf(k).forEach(m => { const t = el("div", "tkt"); t.append(el("span", "tm", m.dep || "--:--")); const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${m.kind || ""}${m.name ? "　" + m.name : ""}`)); t.append(w); dv.append(t); });
+      const dv = el("div", "dayv"); dv.dataset.date = k; const da = dayAt(list, i), sch = daySchedule(k, da);
+      const dtext = dayLabel(k, i);
+      const tmEl = (t, fixed, approx) => el("span", "tm" + (fixed ? " fx" : ""), t == null ? "" : fmtHM(t) + (approx ? "頃" : ""));
+      const warnEls = ev => (ev.warns || []).map(w => el("div", "warn", "注意：" + w));
+      // 時間が足りないときは、正直に知らせる
+      if (sch.warns.length) {
+        const wb = el("div", "daywarn"); wb.append(el("b", null, "この日は、時間が足りないかもしれません（目安）"));
+        const ul = el("ul"); sch.warns.forEach(w => ul.append(el("li", null, w))); wb.append(ul);
+        wb.append(el("span", "note", "予定を減らす、順番を変える、時刻をずらす、のどれかをおすすめします。"));
+        dv.append(wb);
+      }
+      // 日ごとの操作：外せない移動を足す／カレンダーへ書き出す
+      const act = el("div", "dayact");
+      const amv = el("button", "pillbtn addmv", "＋ 外せない移動（新幹線・飛行機）"); amv.type = "button"; amv.onclick = () => openSheet(`${dtext}　外せない移動を追加`, moveForm(k, null, closeSheet));
+      const aex = el("button", "pillbtn exp", "この日をカレンダーへ"); aex.type = "button"; aex.dataset.date = k; aex.onclick = () => exportIcs([k]);
+      act.append(amv, aex); dv.append(act);
       const rail = el("div", "rail");
-      const meal = (key, label) => {
-        const m = mealsOf(k)[key]; const n = el("div", "node"); n.append(el("b", null, label), document.createTextNode(hasMeal(m) ? mealShort(m, k) : "おまかせ　"));
-        const bt = el("button", "link mealbtn", hasMeal(m) ? "変更" : "場所を決める"); bt.type = "button"; bt.dataset.meal = key; bt.dataset.date = k; bt.style.marginLeft = "8px";
-        bt.setAttribute("aria-label", `${dayLabel(k, i)} ${label}の場所を${hasMeal(m) ? "変更" : "決める"}`);
-        bt.onclick = () => openMealSheet(k, key, label, dayLabel(k, i)); n.append(bt);
-        if (m && mealKind(m) !== "wind" && mealMapUrl(m, k)) n.append(mapLink(mealMapUrl(m, k), "Googleマップ"));
-        return n;
+      // 拠点（出発・到着）：入っていなければ、タップして入れる
+      const baseNode = ev => {
+        const n = el("div", "node bnode"), am = ev.slot === "am", word = am ? "朝の拠点" : "夜の拠点", b = ev.base && hasBase(ev.base) ? ev.base : null;
+        if (!am && ev.arrive != null) n.append(tmEl(ev.arrive, false, true)); else n.append(el("span", "tm", am ? "出発" : ""));
+        n.append(el("b", null, word), document.createTextNode(b ? baseName(b) : "未設定"));
+        const bt = el("button", b ? "link basebtn" : "pillbtn basebtn", b ? "変更" : "＋ 入れる"); bt.type = "button"; bt.dataset.slot = ev.slot; bt.dataset.date = k; bt.style.marginLeft = "8px";
+        bt.setAttribute("aria-label", `${dtext} ${word}を${b ? "変更" : "入れる"}`); bt.onclick = () => openSheet(`${dtext}　${word}`, slotEditor(k, ev.slot));
+        n.append(bt); if (b && (b.name || b.address)) n.append(mapLink(mapsQ([b.name, b.address].filter(Boolean).join(" ")), "Googleマップ"));
+        warnEls(ev).forEach(x => n.append(x)); return n;
       };
-      rail.append(meal("b", "朝食"));
-      SLOTS.forEach(([sl, label], n) => {
-        const z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dayLabel(k, i)} ${label}`);
+      const moveNode = ev => {
+        const m = ev.m, n = el("div", "node mvnode"), t = el("div", "tkt"); t.dataset.move = m.id;
+        t.append(el("span", "tm", fmtHM(ev.start)));
+        const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${m.kind || ""}${m.name ? "　" + m.name : ""}`)); t.append(w);
+        const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dtext}　外せない移動`, moveForm(k, m, closeSheet)); t.append(ed);
+        n.append(t); warnEls(ev).forEach(x => n.append(x)); return n;
+      };
+      const mealNode = ev => {
+        const m = ev.m, key = ev.key, label = ev.label, n = el("div", "node");
+        n.append(tmEl(ev.start, ev.fixed, !ev.fixed), el("b", null, label), document.createTextNode(hasMeal(m) ? mealShort(m, k, true) : "おまかせ　"));
+        const bt = el("button", hasMeal(m) ? "link mealbtn" : "pillbtn mealbtn", hasMeal(m) ? "変更" : "＋ 場所を決める"); bt.type = "button"; bt.dataset.meal = key; bt.dataset.date = k; bt.style.marginLeft = "8px";
+        bt.setAttribute("aria-label", `${dtext} ${label}の場所を${hasMeal(m) ? "変更" : "決める"}`);
+        bt.onclick = () => openMealSheet(k, key, label, dtext); n.append(bt);
+        if (m && mealKind(m) !== "wind" && mealMapUrl(m, k)) n.append(mapLink(mealMapUrl(m, k), "Googleマップ"));
+        warnEls(ev).forEach(x => n.append(x)); return n;
+      };
+      const slotZone = ev => {
+        const sl = ev.sl, label = SLOTS.find(x => x[0] === sl)[1], z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dtext} ${label}`);
         const zt = el("div", "zt", SLOT_SHORT[sl]); zt.append(el("small", null, label.replace(/^[^（]*/, "").replace(/[（）]/g, ""))); z.append(zt);
         const ids = slotIds(k, sl), anc = slotAnchor(k, da, sl), nxt = slotNext(k, da, sl);
         if (anc) z.append(el("div", "anc", `起点：${anc.label}`));
         if (!ids.length) z.append(el("div", "hint", "ここにカードをドロップ"));
-        ids.forEach((id, idx) => {
-          const s = spotById(id);
-          const lg = idx === 0 ? (anc ? legEl(anc.p, s, "↓") : null) : legEl(spotById(ids[idx - 1]), s, "↓");
+        ev.items.forEach((it, idx) => {
+          const s = it.s;
+          const lg = idx === 0 ? (anc ? legEl(anc.p, s, "↓") : null) : legEl(ev.items[idx - 1].s, s, "↓");
           if (lg) z.append(lg);
-          z.append(chipFor(s, { num: true, sub: distText(s, da) }));
+          z.append(chipFor(s, { num: true, time: `${fmtHM(it.start)}〜${fmtHM(it.end)}頃`, sub: distText(s, da) }));
         });
-        if (ids.length && nxt) { const lg = legEl(spotById(ids[ids.length - 1]), nxt.p, `↓ ${nxt.label}へ`); if (lg) z.append(lg); }
+        if (ids.length && nxt) { const lg = legEl(ev.items[ev.items.length - 1].s, nxt.p, `↓ ${nxt.label}へ`); if (lg) z.append(lg); }
         // 起点（食事・拠点）から近い順に、まだ入れていない場所を出す
         const key = k + "|" + sl, sgb = el("button", "link sgb", sgOpen.has(key) ? "近くの場所の候補をとじる" : `${anc ? anc.label.replace(/（.*/, "") : "拠点"}から近い場所を探す`); sgb.type = "button";
         sgb.onclick = () => { if (sgOpen.has(key)) sgOpen.delete(key); else sgOpen.add(key); renderBoard(); };
@@ -1541,10 +1662,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           });
           z.append(box);
         }
-        rail.append(z);
-        if (n === 0) rail.append(meal("l", "昼食"));
-        if (n === 1) rail.append(meal("d", "夕食"));
-      });
+        return z;
+      };
+      sch.evs.forEach(ev => rail.append(ev.type === "base" ? baseNode(ev) : ev.type === "move" ? moveNode(ev) : ev.type === "meal" ? mealNode(ev) : slotZone(ev)));
       dv.append(rail); days.append(dv);
     });
     // 登録リスト（画面の下に固定。横にスクロール）
@@ -1557,7 +1677,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (!shown.length) strip.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
     shown.forEach(s => { const w = whereIs(s.id); strip.append(chipFor(s, { tag: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : "", sub: s.area || "" })); if (w) strip.lastChild.classList.add("used"); });
     tray.append(th, strip);
-    box.append(tabs, days, tray);
+    const expRow = el("div", "dayact"); expRow.id = "board-export";
+    const eall = el("button", "pillbtn exp", "全部の日をカレンダーへ"); eall.type = "button"; eall.id = "exp-all"; eall.onclick = () => exportIcs(list);
+    expRow.append(eall, el("span", "note", "iPhoneのカレンダーに入れるファイルを作ります。「頃」の時刻は目安です。"));
+    box.append(expRow, tabs, days, tray);
     showDay(boardDay);
     if (Math.abs(scrollY - keepY) > 0) scrollTo(0, keepY);
   }
@@ -1632,7 +1755,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     : mealKind(m) === "wind" ? `風まかせ（場所は決めない。ルートの近くで探してよい）${mealTime(m)}`
     : mealKind(m) === "station" ? `${m.name || "駅"}の周辺で（駅の近くで食べる）${m.address ? "（" + m.address + "）" : ""}${mealTime(m)}`
     : `${m.name || "（お店は未定）"}${m.address ? "（" + m.address + "）" : ""}${mealTime(m)}`;
-  const mealShort = (m, k) => mealKind(m) === "base" ? `${baseWord(m)}の拠点：${mealBaseOf(k, m) ? baseName(mealBaseOf(k, m)) : "（未登録）"}${mealTime(m)}` : mealKind(m) === "wind" ? "風まかせ" + mealTime(m) : mealKind(m) === "station" ? `駅：${m.name || "（未定）"}${mealTime(m)}` : mealText(m);
+  const mealShort = (m, k, nt) => mealKind(m) === "base" ? `${baseWord(m)}の拠点：${mealBaseOf(k, m) ? baseName(mealBaseOf(k, m)) : "（未登録）"}${nt ? "" : mealTime(m)}` : mealKind(m) === "wind" ? "風まかせ" + (nt ? "" : mealTime(m)) : mealKind(m) === "station" ? `駅：${m.name || "（未定）"}${mealTime(m)}` : mealText(m);
   const mealsOf = k => (state.plan.days[k] || {}).meals || {};
   // 食事の場所の位置を、住所から調べる（住所があるときだけ。名前だけだと別の場所が出やすいので調べない）
   async function locateMeal(k, key){
@@ -1717,18 +1840,76 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     }
   }
   // 日ごとの画面から開く入力欄（画面のまん中に出す小さな窓）
-  function openMealSheet(k, key, label, dayText){
-    $("ms-title").textContent = `${dayText}　${label}の場所`;
-    const host = $("ms-box"); host.textContent = ""; host.append(mealBox(k, key, label));
+  // ---- カレンダー（iPhoneなど）へ書き出す：.ics ファイル（外せない移動・食事・場所・宿）。時刻の「頃」は目安 ----
+  const icsEsc = t => String(t == null ? "" : t).replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  function icsFold(line){ // 1行75バイトまで（日本語は1文字3バイト）。長いときは折りかえす
+    const enc = new TextEncoder(); if (enc.encode(line).length <= 74) return line;
+    const out = []; let cur = "", bytes = 0;
+    for (const ch of line) { const b = enc.encode(ch).length; if (bytes + b > 72) { out.push(cur); cur = ""; bytes = 0; } cur += ch; bytes += b; }
+    out.push(cur); return out.join("\r\n ");
+  }
+  const icsDT = (k, min) => { const d = dparse(k); d.setHours(0, Math.round(min), 0, 0); return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`; };
+  const icsDate = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  function buildIcs(keys){
+    const list = dayList(), now = new Date();
+    const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+    const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Tabi-no-shiori//JA", "CALSCALE:GREGORIAN", "X-WR-CALNAME:旅ナビ"];
+    let n = 0;
+    const vevent = (uid, head, o) => {
+      L.push("BEGIN:VEVENT", `UID:${uid}@tabi-navi`, `DTSTAMP:${stamp}`, ...head, `SUMMARY:${icsEsc(o.title)}`);
+      if (o.loc) L.push(`LOCATION:${icsEsc(o.loc)}`);
+      if (o.desc) L.push(`DESCRIPTION:${icsEsc(o.desc)}`);
+      if (o.url && /^https?:\/\//i.test(o.url)) L.push(`URL:${o.url}`);
+      if (o.alarm) L.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEsc(o.title)}`, `TRIGGER:-PT${o.alarm}M`, "END:VALARM");
+      L.push("END:VEVENT"); n++;
+    };
+    const timed = (uid, k, a, b, o) => vevent(uid, [`DTSTART:${icsDT(k, a)}`, `DTEND:${icsDT(k, Math.max(b, a + 15))}`], o);
+    keys.forEach(k => {
+      const i = list.indexOf(k); if (i < 0) return;
+      const da = dayAt(list, i), sch = daySchedule(k, da), approx = "時間は目安です（直線距離から計算）。";
+      if (hasBase(da.pm) && i < list.length - 1) { const d = dparse(k), d2 = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); vevent(`stay-${k}`, [`DTSTART;VALUE=DATE:${icsDate(d)}`, `DTEND;VALUE=DATE:${icsDate(d2)}`], { title: `宿：${baseName(da.pm)}`, loc: [da.pm.name, da.pm.address].filter(Boolean).join(" "), url: "" }); }
+      sch.evs.forEach(e => {
+        if (e.type === "move") { const m = e.m; timed(`mv-${m.id}`, k, e.start, e.end, { title: `${m.kind || "移動"}${m.name ? " " + m.name : ""}　${m.from || ""}→${m.to || ""}`, loc: m.from, desc: ["絶対に外せない移動", m.memo].filter(Boolean).join("\n"), alarm: m.kind === "飛行機" ? 120 : 60 }); }
+        else if (e.type === "meal" && hasMeal(e.m)) {
+          const m = e.m, b = mealKind(m) === "base" ? mealBaseOf(k, m) : null;
+          timed(`meal-${k}-${e.key}`, k, e.start, e.end, { title: `${e.label}：${mealShort(m, k, true)}`, loc: b ? [b.name, b.address].filter(Boolean).join(" ") : mealKind(m) === "wind" ? "" : (m.address || m.name || ""), url: mealMapUrl(m, k), desc: e.fixed ? "" : approx });
+        }
+        else if (e.type === "slot") e.items.forEach(it => {
+          const s = it.s; timed(`spot-${k}-${s.id}`, k, it.start, it.end, { title: s.name, loc: s.address || s.name, url: spotMapUrl(s), desc: [`${"★".repeat(s.prio)} ${s.kind || ""}`.trim(), s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.memo || "", approx].filter(Boolean).join("\n") });
+        });
+      });
+    });
+    L.push("END:VCALENDAR");
+    return { text: L.map(icsFold).join("\r\n") + "\r\n", count: n };
+  }
+  async function deliverIcs(text, name){
+    const file = new File([text], name, { type: "text/calendar" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: "旅ナビの予定" }); return "share"; } catch (e) { if (e && e.name === "AbortError") return "cancel"; } }
+    const url = URL.createObjectURL(new Blob([text], { type: "text/calendar;charset=utf-8" })), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return "download";
+  }
+  async function exportIcs(keys){
+    const { text, count } = buildIcs(keys);
+    if (!count) { toast("書き出せる予定がありません。外せない移動・食事・場所を入れてください"); return; }
+    const r = await deliverIcs(text, keys.length === 1 ? `tabi-${keys[0]}.ics` : "tabi-all.ics");
+    if (r !== "cancel") toast(`${count}件の予定のファイルを作りました。開いて「カレンダーに追加」を押してください`);
+  }
+  // 画面のまんなかに開く入力の窓（食事・拠点・外せない移動の入力に使う）
+  function openSheet(title, node){
+    $("ms-title").textContent = title;
+    const host = $("ms-box"); host.textContent = ""; host.append(node);
     $("meal-sheet").hidden = false;
   }
-  function closeMealSheet(){
+  function closeSheet(){
     if ($("meal-sheet").hidden) return;
     $("meal-sheet").hidden = true; $("ms-box").textContent = "";
     renderPlan(); // 「日ごとの詳細」の入力欄にも反映する
   }
-  $("ms-close").onclick = closeMealSheet; $("ms-bg").onclick = closeMealSheet;
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeMealSheet(); });
+  const openMealSheet = (k, key, label, dayText) => openSheet(`${dayText}　${label}の場所`, mealBox(k, key, label));
+  const closeMealSheet = closeSheet;
+  $("ms-close").onclick = closeSheet; $("ms-bg").onclick = closeSheet;
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); if (typeof closeMenu === "function") closeMenu(); } });
   function renderPlan(){
     const list = dayList(), box = $("plan-days");
     $("plan-start").value = state.plan.start; $("plan-end").value = state.plan.end;
@@ -2064,9 +2245,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     $("s-latlng").value = hasPos(s) ? `${s.lat}, ${s.lng}` : ""; editOrigLL = $("s-latlng").value;
     prio = s.prio; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", Number(c.dataset.p) === prio ? "true" : "false"));
     $("s-save").textContent = "保存する"; $("s-cancel").hidden = false; $("add-title").textContent = `「${s.name}」を編集`;
-    $("add-box").open = true; $("add-box").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("add-box").open = true; if (curView() === "all") $("add-box").scrollIntoView({ behavior: "smooth", block: "start" }); else go("edit");
   }
-  $("s-cancel").onclick = resetForm;
+  $("s-cancel").onclick = () => { resetForm(); if (curView() === "edit") goBack("spots"); };
   $("spot-form").onsubmit = e => {
     e.preventDefault();
     const v = {}; Object.entries(FIELDS).forEach(([k, fid]) => v[k] = $(fid).value.trim());
@@ -2087,7 +2268,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (ll) { target.lat = ll.lat; target.lng = ll.lng; }
       state.spots.push(target); cloudMark(id, "up"); toast(`「${v.name}」を追加しました`);
     }
-    save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots();
+    save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots(); if (curView() === "edit") goBack("spots");
     if (!hasPos(target)) locate(target.id); // 住所から位置を調べる（裏で）
   };
 
@@ -2172,7 +2353,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const open = state.spots.filter(s => !s.done), n = open.length, placed = open.filter(s => whereIs(s.id)).length;
     const thin = open.filter(s => !s.address || !s.hours).length;
     const cur = !n ? 1 : placed < n ? 2 : 3;
-    const mk = (no, title, sub, target) => { const b = el("button"); b.type = "button"; b.className = (cur === no ? "cur" : cur > no ? "ok" : ""); const t = el("b"); t.append(el("i", null, String(no)), document.createTextNode(title)); b.append(t, el("small", null, sub)); b.onclick = () => { const e = $(target); if (e) e.scrollIntoView({ behavior: "smooth", block: "start" }); if (e && e.tagName === "DETAILS") e.open = true; }; box.append(b); };
+    const mk = (no, title, sub, target) => { const b = el("button"); b.type = "button"; b.className = (cur === no ? "cur" : cur > no ? "ok" : ""); const t = el("b"); t.append(el("i", null, String(no)), document.createTextNode(title)); b.append(t, el("small", null, sub)); b.onclick = () => { if (target === "plan-card") { go("days"); return; } const e = $(target); if (e) e.scrollIntoView({ behavior: "smooth", block: "start" }); if (e && e.tagName === "DETAILS") e.open = true; }; box.append(b); };
     mk(1, "集める", n ? `${n}か所` : "まだ0か所", "qa-card");
     mk(2, "割りふる", n ? `${placed}/${n}か所` : "-", "board-card");
     mk(3, "くわしく", thin ? `未入力 ${thin}件` : n ? "そろった" : "-", "plan-card");
@@ -2213,6 +2394,50 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   };
   renderPlan();
   applyMode();
+  // ---------- 別画面（右上のメニューから行く）：1つの画面にぜんぶ並べず、見たいものだけを出す ----------
+  const VIEWS = { spots: "行きたい場所のリスト", days: "日ごとの詳細（拠点・移動・食事）", hubs: "交通の拠点（駅・バス停など）", map: "距離マップ", routes: "保存したルート", settings: "旅の設定・バックアップ", edit: "場所を詳しく入れる" };
+  const VIEW_EL = { days: "plan-card", hubs: "hub-card", map: "map-card", routes: "routes-card", settings: "settings-card", edit: "add-box" };
+  const curView = () => { if (new URLSearchParams(location.search).get("view") === "all") return "all"; const h = decodeURIComponent(location.hash.replace(/^#/, "")); return VIEWS[h] ? h : "main"; };
+  const homeUrl = () => location.pathname + location.search;
+  function applyView(){
+    const v = curView(), prev = document.body.dataset.view, sub = v !== "main" && v !== "all";
+    if (sub && VIEW_EL[v] && $(VIEW_EL[v]).hidden) { toast(v === "map" ? "地図に出せる場所がまだありません" : "まだありません"); history.replaceState({ d: 0 }, "", homeUrl()); document.body.dataset.view = "main"; $("subbar").hidden = true; return; }
+    document.body.dataset.view = v;
+    $("subbar").hidden = !sub; if (sub) $("sub-title").textContent = v === "edit" ? $("add-title").textContent : VIEWS[v];
+    if (sub && VIEW_EL[v] && $(VIEW_EL[v]).tagName === "DETAILS") $(VIEW_EL[v]).open = true;
+    closeMenu(); if (prev !== v) scrollTo(0, 0);
+  }
+  function go(v){
+    const cur = curView();
+    if (cur === "all") { const id = VIEW_EL[v] || (v === "spots" ? "spots-head" : ""), e = id && $(id); if (e) { if (e.tagName === "DETAILS") e.open = true; e.scrollIntoView({ behavior: "smooth", block: "start" }); } return; } // ふるい「ぜんぶ1画面」（?view=all）
+    if (v === cur) { closeMenu(); return; }
+    history.pushState({ d: ((history.state && history.state.d) || 0) + 1 }, "", v === "main" ? homeUrl() : "#" + v); applyView();
+  }
+  function goBack(fallback){
+    if (history.state && history.state.d > 0) history.back();
+    else { history.replaceState({ d: 0 }, "", fallback && fallback !== "main" ? "#" + fallback : homeUrl()); applyView(); }
+  }
+  window.addEventListener("popstate", applyView); window.addEventListener("hashchange", applyView);
+  function closeMenu(){ $("menu").hidden = true; }
+  function openMenu(){
+    const p = $("menu-panel"), v = curView(); p.textContent = "";
+    const item = (to, text, cnt) => { const b = el("button"); b.type = "button"; b.dataset.go = to; if (v === to) b.className = "cur"; b.append(el("span", null, text)); if (cnt != null) b.append(el("span", "cnt", cnt)); b.onclick = () => { closeMenu(); go(to); }; p.append(b); };
+    item("main", "ホーム（計画する・いま使う）");
+    p.append(document.createElement("hr"));
+    item("spots", VIEWS.spots, `${state.spots.length}か所`);
+    item("days", VIEWS.days);
+    item("hubs", VIEWS.hubs, `${hubs().length}か所`);
+    if (!$("map-card").hidden) item("map", VIEWS.map);
+    if (!$("routes-card").hidden) item("routes", VIEWS.routes);
+    item("settings", VIEWS.settings);
+    p.append(document.createElement("hr"));
+    item("edit", "場所を手で詳しく入れる");
+    $("menu").hidden = false;
+  }
+  $("menu-btn").onclick = $("menu-btn2").onclick = () => { if ($("menu").hidden) openMenu(); else closeMenu(); };
+  $("menu-bg").onclick = closeMenu;
+  $("sub-back").onclick = () => goBack("main");
+  applyView();
 
   // ---------- Claude へのお願い文を作る ----------
   const SITUATION = {
