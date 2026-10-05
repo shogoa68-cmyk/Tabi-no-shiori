@@ -14,8 +14,9 @@
 - ファイルは `index.html` の1枚だけ（HTML・CSS・JS をすべてこの中に書く。ビルドなし・ライブラリなし。例外：クラウド保存用の supabase-js だけは jsDelivr から版を固定して読みこむ）
 - 保存先：`localStorage`（キー `tabi-navi-v1`）。端末のブラウザの中だけに保存
   - 形：`{ spots: [...], here: {lat,lng,acc,at,address} | null, settings: {要素id: 値}, backupAt?: 最後にコピーした時刻, guardHideUntil?: 案内を隠す期限 }`
-  - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created, lat?, lng?, by?, geoFail? }`（`address`・`lat/lng` は後から追加。古いデータにはないので空として扱う。`by`＝追加した人（クラウドから来たときだけ）、`geoFail`＝位置を調べて見つからなかった印で、手元だけ）
+  - spot：`{ id, name, prio(1-3), area, address, stay(分|null), hours, closed, kind, when, map, memo, done, created, lat?, lng?, cost?, by?, geoFail? }`（`address`・`lat/lng` は後から追加。古いデータにはないので空として扱う。`by`＝追加した人（クラウドから来たときだけ）、`geoFail`＝位置を調べて見つからなかった印で、手元だけ。`cost`＝金額（円、整数。空なら入っていない）。古いデータにはないので空として扱う）
   - plan（日程と拠点）：`{ start: "YYYY-MM-DD", end, days: { 日付: { area?: "その日のエリア", am?: 基地, pm?: 基地, moves?: [外せない移動], slots?: {am,pm,ev: [場所id]}, meals?: { b?: 食事, l?: 食事, d?: 食事 } } }, hubs: [交通の拠点] }`、食事の希望＝`{ kind?: "wind"|"station"|"base", base?: "am"|"pm", name, address, time, lat?, lng?, map?, spot? }`（`spot`＝登録した場所のid。登録リストからドラッグして決めたとき。名前や住所を書きかえると消える）（`kind` なし＝お店を決める（または空＝おまかせ）、`base`＝朝（`base:"am"`）または夜（`"pm"`）の拠点で食べる（宿の食事など。名前・位置は持たず、その日の拠点をそのまま使う＝`mealBaseOf`。拠点を変えると食事の場所も変わる。入れていない日は前の日の夜の拠点など）、`wind`＝風まかせ（場所は決めない。名前・住所は空）、`station`＝駅の近くで食べる（name＝駅名。位置あり）。b＝朝食・l＝昼食・d＝夕食。どれも空でよい。古いデータにはないので空として扱う）、交通の拠点＝`{ id, kind: "駅"|"バス停"|"空港"|"港", name, address?, lat?, lng? }`（旅ごとの共通リスト。古いデータにはないので空として扱う）、基地＝`{ name, address, lat?, lng? }`。`state.plan` は旅ごと（クラウドでは `trip_plans.plan`）。入れていない日は、朝＝前の日の夜、夜＝朝と同じになる（`effBase`）。古いデータにはないので空として扱う
+  - 金額（`cost`）：場所（`spot.cost`）・食事（`meals.b/l/d` の `cost`）・外せない移動（`moves[].cost`）・夜の拠点の宿泊費（`days[日付].pm.cost`。朝の拠点には持たない。拠点の名前を変えても残る。名前も住所も空にすると拠点ごと消える）。入力は `parseYen`（全角・「,」・「円」「¥」もOK。0や数字でないものは空）、欄は `costField`（`.cost-in`）。表示：場所の一覧・カードに「1,500円」、外せない移動の切符、食事の行、夜の拠点に「宿泊 ○円」、日ごとの画面の上に「この日の金額」（`dayCostParts`＝枠に入れた場所＋食事＋移動＋宿泊。内訳つき）、「2 日ごとに割りふる」の上に「旅ぜんたいの金額」（まだ枠に入れていない場所の金額は別に出す）。お願い文には「約○円」「予算 約○円」と入れる（場所・食事・移動）。クラウド：場所の金額だけ `spots.cost` 列が要る（`supabase/migrations/004_cost.sql`）。列が無いあいだは `cloud.cost` が false で手元だけに保存し、列ができたら送る（`probeCost`・`pullSpots` で手元の金額を残して送る。ほかは `trip_plans` の中身なので新しい表はいらない）
   - settings の `day-sel`（ルート提案に使う日。`auto`＝今日、旅の外なら1日目）、`start-time`（朝の出発時刻）
   - **データの形を変えるときは、古いデータも読めるようにすること**（オーナーのリストが消えないように）
 - データを守る案内（`#guard`）：iPhoneのSafariは7日間ひらかないサイトのデータを消すことがあるため、
@@ -24,7 +25,7 @@
   - 出す条件：iPhoneのSafari、またはバックアップが一度もない／7日以上前。「あとで」で3日間かくす
   - 起動時に `navigator.storage.persist()` を呼ぶ
 - クラウド保存（「旅の設定・バックアップ」の中。だれにでも表示）：Supabase プロジェクト `cnnwxwiqauyawngkpapk`、Google ログイン。supabase-js は起動時に読みこむ（読めなくても手元保存で動く）
-  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS）、`002_share.sql`（profiles / trip_invites / spot_likes / routes ＋ 招待の関数 `preview_invite`・`join_trip`）、`003_plan_coords.sql`（spots.lat/lng、trip_plans）。002 が未実行でも場所の同期は動き、共有の欄だけ隠れる（`cloud.features`）。003 が未実行でも同じ（`cloud.coords`・`cloud.planOk`。拠点は手元だけに保存し、位置の欄がないときは toRow に lat/lng を入れない）
+  - 表：`supabase/migrations/001_trips_spots.sql`（trips / trip_members / spots ＋ RLS）、`002_share.sql`（profiles / trip_invites / spot_likes / routes ＋ 招待の関数 `preview_invite`・`join_trip`）、`003_plan_coords.sql`（spots.lat/lng、trip_plans）。002 が未実行でも場所の同期は動き、共有の欄だけ隠れる（`cloud.features`）。003 が未実行でも同じ（`cloud.coords`・`cloud.planOk`。004 は金額の列＝`cloud.cost`。拠点は手元だけに保存し、位置の欄がないときは toRow に lat/lng を入れない）
   - 位置は、クラウドに無くて手元にあるときは手元を残して送る（`pullSpots`）。拠点（plan）は `sync.planDirty` で送る→受け取る（同期の最中に直したときは次の同期でまた送る）。クラウドに拠点の行が無くて手元にあるときも送る
   - 「表・欄がまだ無い」（`cloud.features/planOk/coords` が false）という判断は、30秒たつか「いま同期する」でもう一度確かめる（`recheckFeatures`）。表が無いあいだも、拠点の「あとで送る」の印は消さない。送るものが新しく見つかったときは、すぐもう一度同期する（`followUpSync`、続けて2回まで）
   - クラウド（jsonb）は拠点のキーの並びを入れかえて返すので、比べるときは並びに関係ない `canon()` を使う。画面を作りなおすときは、開いていた日のカードを開いたままにする
