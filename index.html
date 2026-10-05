@@ -461,7 +461,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <div class="spots" id="spots" data-v="spots"></div>
     <div class="bulkbar" id="bulk-bar" data-v="spots" hidden>
       <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b id="bulk-count">0か所を選んでいます</b><span class="row" style="gap:10px"><button class="link" type="button" id="bulk-all">ぜんぶ選ぶ</button><button class="link" type="button" id="bulk-none">解除</button></span></div>
-      <div class="row" style="flex-wrap:nowrap"><input id="bulk-area" list="area-list" maxlength="40" placeholder="エリア名（例：新潟市）" aria-label="まとめて変えるエリア名" style="flex:1;min-width:0"><button class="btn small" type="button" id="bulk-apply">エリアを変える</button></div>
+      <div class="row" id="bulk-chips" style="gap:6px"></div>
+      <input id="bulk-area" list="area-list" maxlength="80" placeholder="ほかのエリア名（「、」でいくつでも）" aria-label="まとめて入れるエリア名">
+      <div class="row" style="gap:8px"><button class="btn small" type="button" id="bulk-apply">エリアを変える（おきかえ）</button><button class="btn ghost small" type="button" id="bulk-add">エリアを足す</button></div>
       <button class="link" type="button" id="bulk-clear" style="align-self:flex-start">選んだ場所のエリアを消す</button>
     </div>
     <datalist id="area-list"></datalist>
@@ -483,7 +485,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           </div>
         </div>
         <div class="grid">
-          <label>エリア<input id="s-area" maxlength="60" list="area-list" placeholder="例：伏見区"></label>
+          <label>エリア（いくつでも。「、」でつなぐ）<input id="s-area" maxlength="80" list="area-list" placeholder="例：伏見区、京都駅まわり"><span id="s-area-chips" class="row" style="gap:6px;margin-top:6px"></span></label>
           <label>滞在したい時間
             <select id="s-stay"><option value="">おまかせ</option><option value="15">15分</option><option value="30">30分</option><option value="60">1時間</option><option value="90">1時間半</option><option value="120">2時間</option><option value="180">3時間</option></select></label>
           <label>営業時間<input id="s-hours" maxlength="40" placeholder="例：9:00〜17:00"></label>
@@ -1200,12 +1202,22 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // まとめて選んで、エリアを変える
   let bulkMode = false; const bulkSel = new Set();
   function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; }
-  function applyBulk(v){
+  // まとめて入れるエリア（ボタンで選んだもの＋入力欄に書いたもの。複数OK）
+  const bulkAreas = new Set();
+  const bulkChosen = () => [...new Set([...bulkAreas, ...splitAreas($("bulk-area").value)])];
+  function renderBulkChips(){
+    const box = $("bulk-chips"); if (!box) return; box.textContent = "";
+    allAreas().forEach(a => { const b = el("button", "pillbtn", a); b.type = "button"; b.setAttribute("aria-pressed", bulkAreas.has(a) ? "true" : "false"); b.onclick = () => { if (bulkAreas.has(a)) bulkAreas.delete(a); else bulkAreas.add(a); renderBulkChips(); }; box.append(b); });
+  }
+  // mode: "replace"＝おきかえ、"add"＝いまのエリアに足す、"clear"＝消す
+  function applyBulk(mode){
     const ids = [...bulkSel].filter(id => state.spots.some(x => x.id === id));
     if (!ids.length) { toast("まず、場所を選んでください"); return; }
-    state.spots.forEach(s => { if (ids.includes(s.id)) { if (v) s.area = v; else delete s.area; cloudMark(s.id, "up"); } });
-    save(); toast(v ? `${ids.length}か所のエリアを「${v}」にしました` : `${ids.length}か所のエリアを消しました`);
-    bulkSel.clear(); $("bulk-area").value = ""; renderSpots();
+    const ch = bulkChosen();
+    if (mode !== "clear" && !ch.length) { toast("エリアを選ぶか、入れてください"); return; }
+    state.spots.forEach(s => { if (!ids.includes(s.id)) return; if (mode === "clear") delete s.area; else if (mode === "add") s.area = joinAreas([...splitAreas(s.area), ...ch]); else s.area = joinAreas(ch); cloudMark(s.id, "up"); });
+    save(); toast(mode === "clear" ? `${ids.length}か所のエリアを消しました` : mode === "add" ? `${ids.length}か所にエリア「${joinAreas(ch)}」を足しました` : `${ids.length}か所のエリアを「${joinAreas(ch)}」にしました`);
+    bulkSel.clear(); bulkAreas.clear(); $("bulk-area").value = ""; renderSpots();
   }
   function renderSpotList(){
     const box = $("spots"); box.textContent = "";
@@ -1216,14 +1228,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const bySort = state.settings["spot-sort"] === "area";
     $("bulk-toggle").textContent = bulkMode ? "選ぶのをやめる" : "まとめて選ぶ"; $("bulk-toggle").setAttribute("aria-pressed", bulkMode ? "true" : "false");
     $("area-sort").textContent = bySort ? "ふつうの順にもどす" : "エリア順にする"; $("area-sort").setAttribute("aria-pressed", bySort ? "true" : "false");
-    $("bulk-bar").hidden = !bulkMode; updateBulk();
+    $("bulk-bar").hidden = !bulkMode; updateBulk(); if (bulkMode) renderBulkChips();
     refreshAreaList();
     if (!state.spots.length) { box.append(el("div","empty","まだありません。下の「場所を追加」から、行きたい場所を入れておこう。")); return; }
     if (!list.length) { box.append(el("div","empty","ぜんぶ行きました！ 「近くのおすすめ」を聞いてみよう。")); return; }
     // エリア順：エリア名の順に、見出しをつけて並べる（エリアが空の場所は、さいごに）
     const headOf = new Map();
     if (bySort) {
-      const key = s => (s.area || "").trim();
+      const key = s => primaryArea(s); // 複数のエリアがある場所は、はじめのエリアの所に並べる
       list = [...list].sort((a, b) => (key(a) === "" ? 1 : 0) - (key(b) === "" ? 1 : 0) || key(a).localeCompare(key(b), "ja"));
       const cnt = {}; list.forEach(s => { cnt[key(s)] = (cnt[key(s)] || 0) + 1; });
       list.forEach(s => { if (!headOf.has(key(s))) headOf.set(key(s), { name: key(s), n: cnt[key(s)], first: s.id }); });
@@ -1232,7 +1244,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const hd = bySort ? [...headOf.values()].find(h => h.first === s.id) : null;
       if (hd) {
         const h = el("div", "areah"); h.dataset.area = hd.name; h.append(el("b", null, hd.name || "エリアなし"), el("small", null, `${hd.n}か所`));
-        if (bulkMode) { const sel = el("button", "link", "このエリアを選ぶ"); sel.type = "button"; sel.onclick = () => { list.filter(x => (x.area || "").trim() === hd.name).forEach(x => bulkSel.add(x.id)); renderSpotList(); }; h.append(sel); }
+        if (bulkMode) { const sel = el("button", "link", "このエリアを選ぶ"); sel.type = "button"; sel.onclick = () => { list.filter(x => primaryArea(x) === hd.name).forEach(x => bulkSel.add(x.id)); renderSpotList(); }; h.append(sel); }
         box.append(h);
       }
       const c = el("article","card spot" + (s.done ? " done" : "") + (bulkMode && bulkSel.has(s.id) ? " bsel" : ""));
@@ -1461,11 +1473,23 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   // 乗り場に着いておきたい余裕（目安）
   const moveMargin = m => m.kind === "飛行機" ? "1時間" : "30分";
   // ---- エリア（行きたい場所の `area` と、日ごとの `area`。合うものを先に並べる） ----
+  // エリアは、「新潟市、長岡」のように、「、」でつないだ文字で持つ（ふるいデータの1つだけのエリアも、そのまま読める）。複数のエリアにまたがってよい
   const normA = t => String(t || "").trim().toLowerCase();
-  const areaOfDay = k => ((state.plan.days[k] || {}).area || "").trim();
-  const areaMatch = (a, b) => { a = normA(a); b = normA(b); return !!a && !!b && (a === b || a.includes(b) || b.includes(a)); }; // 「新潟」と「新潟市」も合う
-  const allAreas = () => [...new Set(state.spots.map(s => (s.area || "").trim()).filter(Boolean))];
-  function refreshAreaList(){ const dl = $("area-list"); if (!dl) return; dl.textContent = ""; allAreas().forEach(a => { const o = document.createElement("option"); o.value = a; dl.append(o); }); }
+  const splitAreas = t => [...new Set(String(t == null ? "" : t).split(/[、,，\/／]+/).map(x => x.trim()).filter(Boolean))];
+  const joinAreas = arr => [...new Set(arr.map(x => String(x).trim()).filter(Boolean))].join("、");
+  const primaryArea = s => splitAreas(s.area)[0] || "";
+  const areaOfDay = k => joinAreas(splitAreas((state.plan.days[k] || {}).area));
+  // どれか1つでも合えば合う（「新潟」と「新潟市」も合う）
+  const areaMatch = (a, b) => { const A = splitAreas(a).map(normA), B = splitAreas(b).map(normA); return A.some(x => B.some(y => x === y || x.includes(y) || y.includes(x))); };
+  const allAreas = () => [...new Set([...state.spots.flatMap(s => splitAreas(s.area)), ...Object.values(state.plan.days).flatMap(d => splitAreas(d && d.area))])];
+  function refreshAreaList(){ const dl = $("area-list"); if (!dl) return; dl.textContent = ""; allAreas().forEach(a => { const o = document.createElement("option"); o.value = a; dl.append(o); }); renderSpotAreaChips(); }
+  // 場所の入力欄のエリア：登録ずみのエリアをボタンで、いくつでも選べる
+  function renderSpotAreaChips(){
+    const box = $("s-area-chips"), inp = $("s-area"); if (!box || !inp) return; box.textContent = "";
+    const cur = splitAreas(inp.value);
+    [...new Set([...allAreas(), ...cur])].forEach(a => { const b = el("button", "pillbtn", a); b.type = "button"; b.setAttribute("aria-pressed", cur.includes(a) ? "true" : "false");
+      b.onclick = e => { e.preventDefault(); const c = splitAreas(inp.value); inp.value = joinAreas(c.includes(a) ? c.filter(x => x !== a) : [...c, a]); renderSpotAreaChips(); }; box.append(b); });
+  }
   function pruneDay(k){
     const day = state.plan.days[k]; if (!day) return;
     if (day.area != null && !String(day.area).trim()) delete day.area;
@@ -1473,16 +1497,16 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (day.slots) { Object.keys(day.slots).forEach(n => { if (!Array.isArray(day.slots[n]) || !day.slots[n].length) delete day.slots[n]; }); if (!Object.keys(day.slots).length) delete day.slots; }
     if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots && !day.area) delete state.plan.days[k];
   }
-  // その日の「エリア」の入力欄（日ごとの詳細と、日ごとの画面の窓の両方で使う）
+  // その日の「エリア」の入力欄（日ごとの詳細と、日ごとの画面の窓の両方で使う）。複数のエリアを選べる
   function areaBox(k){
     const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.areabox = k;
-    box.append(el("span", "note", "この日のエリア（例：新潟市、湯沢）。登録リストでは、このエリアの場所が先に並びます。"));
-    const inp = mkInput("a-in", "この日のエリア", 40); inp.setAttribute("list", "area-list"); inp.placeholder = "エリア名（空なら指定なし）"; inp.value = areaOfDay(k);
-    const commit = v => { v = v.trim(); const day = state.plan.days[k] = state.plan.days[k] || {}; if (v) day.area = v; else delete day.area; pruneDay(k); changePlan(); refreshPlanLabels(); };
-    inp.onchange = () => commit(inp.value);
-    box.append(inp);
-    const as = allAreas();
-    if (as.length) { const chips = el("div", "row"); chips.style.gap = "6px"; as.forEach(a => { const b = el("button", "pillbtn", a); b.type = "button"; b.onclick = () => { inp.value = a; commit(a); }; chips.append(b); }); box.append(el("span", "note", "登録した場所のエリア（タップで入れる）"), chips); }
+    box.append(el("span", "note", "この日のエリア（いくつでも選べます。例：新潟市、長岡）。登録リストでは、どれかのエリアに合う場所が先に並びます。"));
+    const inp = mkInput("a-in", "この日のエリア（「、」でつなぐ）", 80); inp.setAttribute("list", "area-list"); inp.placeholder = "エリア名（空なら指定なし）"; inp.value = areaOfDay(k);
+    const chips = el("div", "row"); chips.style.gap = "6px";
+    const paint = () => { const cur = splitAreas(inp.value); chips.textContent = ""; [...new Set([...allAreas(), ...cur])].forEach(a => { const b = el("button", "pillbtn", a); b.type = "button"; b.setAttribute("aria-pressed", cur.includes(a) ? "true" : "false"); b.onclick = () => { const c = splitAreas(inp.value); inp.value = joinAreas(c.includes(a) ? c.filter(x => x !== a) : [...c, a]); commit(); }; chips.append(b); }); };
+    const commit = () => { const v = joinAreas(splitAreas(inp.value)); inp.value = v; const day = state.plan.days[k] = state.plan.days[k] || {}; if (v) day.area = v; else delete day.area; pruneDay(k); changePlan(); refreshPlanLabels(); paint(); };
+    inp.onchange = commit;
+    box.append(inp, el("span", "note", "登録した場所のエリア（タップで、入れる・外す）"), chips); paint();
     return box;
   }
   // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
@@ -2397,20 +2421,21 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function resetForm(){
     editing = null; editOrigLL = ""; $("spot-form").reset(); $("s-kind").value = "観光";
     prio = 2; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c.dataset.p === "2" ? "true" : "false"));
-    $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を詳しく入れる・編集する";
+    $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を詳しく入れる・編集する"; renderSpotAreaChips();
   }
   function startEdit(id){
     const s = state.spots.find(x => x.id === id); if (!s) return;
     editing = id; Object.entries(FIELDS).forEach(([k, fid]) => $(fid).value = s[k] != null ? s[k] : "");
     $("s-latlng").value = hasPos(s) ? `${s.lat}, ${s.lng}` : ""; editOrigLL = $("s-latlng").value;
     prio = s.prio; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", Number(c.dataset.p) === prio ? "true" : "false"));
-    $("s-save").textContent = "保存する"; $("s-cancel").hidden = false; $("add-title").textContent = `「${s.name}」を編集`;
+    renderSpotAreaChips(); $("s-save").textContent = "保存する"; $("s-cancel").hidden = false; $("add-title").textContent = `「${s.name}」を編集`;
     $("add-box").open = true; if (curView() === "all") $("add-box").scrollIntoView({ behavior: "smooth", block: "start" }); else go("edit");
   }
+  $("s-area").addEventListener("input", renderSpotAreaChips);
   $("s-cancel").onclick = () => { resetForm(); if (curView() === "edit") goBack("spots"); };
   $("spot-form").onsubmit = e => {
     e.preventDefault();
-    const v = {}; Object.entries(FIELDS).forEach(([k, fid]) => v[k] = $(fid).value.trim());
+    const v = {}; Object.entries(FIELDS).forEach(([k, fid]) => v[k] = $(fid).value.trim()); v.area = joinAreas(splitAreas(v.area)); // エリアは、「、」でつないだ形にそろえる
     if (!v.name) { $("s-msg").textContent = "名前を入れてください"; return; }
     v.stay = v.stay ? Number(v.stay) : null; v.prio = prio;
     const llText = $("s-latlng").value.trim(); let ll = null;
@@ -2572,8 +2597,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("area-sort").onclick = () => { state.settings["spot-sort"] = state.settings["spot-sort"] === "area" ? "" : "area"; save(); renderSpotList(); };
   $("bulk-all").onclick = () => { sorted().filter(s => $("show-done").checked || !s.done).forEach(s => bulkSel.add(s.id)); renderSpotList(); };
   $("bulk-none").onclick = () => { bulkSel.clear(); renderSpotList(); };
-  $("bulk-apply").onclick = () => { const v = $("bulk-area").value.trim(); if (!v) { toast("エリア名を入れてください"); return; } applyBulk(v); };
-  $("bulk-clear").onclick = () => applyBulk("");
+  $("bulk-apply").onclick = () => applyBulk("replace");
+  $("bulk-add").onclick = () => applyBulk("add");
+  $("bulk-clear").onclick = () => applyBulk("clear");
   renderPlan();
   applyMode();
   // ---------- 別画面（右上のメニューから行く）：1つの画面にぜんぶ並べず、見たいものだけを出す ----------
