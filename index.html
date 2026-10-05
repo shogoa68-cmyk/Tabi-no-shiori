@@ -149,6 +149,8 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 .node .mlink{margin:0 0 0 10px;font-size:13px}
 .leg{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 10px;font-size:11.5px;color:var(--muted);line-height:1.5;padding:1px 0}
 .leg a{color:var(--accent);font-weight:700}
+.leg.unk{color:var(--star)}
+.leg.unk .link{font-size:11.5px;font-weight:700}
 .anc{font-size:12px;color:var(--muted)}
 .sgb{align-self:flex-start;font-size:13px}
 .sg{display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--bar);padding-top:6px}
@@ -1563,6 +1565,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const arr = Array.isArray(day.slots[sl]) ? day.slots[sl] : (day.slots[sl] = []);
     arr.splice(Math.max(0, Math.min(index, arr.length)), 0, id);
     changePlan();
+    const sp = spotById(id); if (sp && !hasPos(sp) && !sp.geoFail && (sp.address || sp.name)) locate(id); // 位置が分からない場所は、入れたときに調べる（見つからなかった印があれば、くりかえさない）
   }
   const dayAt = (list, i) => { const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"); return { am, pm, same: hasBase(am) && hasBase(pm) && sameBase(am, pm) }; };
   // 場所の一覧：この日の予定に入っている場所を、区分ごとに「午前：A→B」のように短くまとめる
@@ -1607,6 +1610,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const fmtHM = n => `${pad(Math.floor(n / 60) % 24)}:${pad(Math.round(n) % 60)}`;
   const stayMin = s => s.stay || (s.kind === "カフェ" ? 45 : 60); // 滞在時間（入れていなければ、1時間の目安）
   const MEAL_DUR = { b: 45, l: 60, d: 90 };
+  const UNK_LEG = 15; // 位置が分からない場所との移動は、仮に15分で計算する
   function daySchedule(k, da){
     const st = hm(($("start-time") && $("start-time").value) || ""), stT = st == null ? 540 : st;
     const defT = { b: Math.max(360, stT - 60), l: 720, d: 1110 };
@@ -1626,7 +1630,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         add({ type: "move", m: it.m, start: dep, end: arr }, w);
         cursor = Math.max(cursor == null ? 0 : cursor, arr); pos = null; // 移動のあとの場所は、わからない
       } else {
-        const pt = mealPoint(k, it.key), tr = pos && pt ? travel(pos, pt).min : 0;
+        const pt = mealPoint(k, it.key), tr = pt ? (pos ? travel(pos, pt).min : (cursor != null ? UNK_LEG : 0)) : 0;
         let start = it.t, w = "";
         if (it.fixed) { if (cursor != null && cursor + tr > it.t) w = `${it.label}（${fmtHM(it.t)}）に間に合わない目安です（前の予定が${fmtHM(cursor + tr)}ごろまでかかります）。`; }
         else start = Math.max(it.t, cursor == null ? 0 : cursor + tr);
@@ -1635,13 +1639,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         cursor = end; if (pt) pos = pt;
         const sl = { b: "am", l: "pm", d: "ev" }[it.key], items = [];
         slotIds(k, sl).forEach(id => {
-          const s = spotById(id), tr2 = pos && hasPos(s) ? travel(pos, s).min : 0, a = cursor + tr2, e = a + stayMin(s);
-          items.push({ id, s, start: a, end: e }); cursor = e; if (hasPos(s)) pos = s;
+          const s = spotById(id), tr2 = pos && hasPos(s) ? travel(pos, s).min : UNK_LEG, a = cursor + tr2, e = a + stayMin(s);
+          items.push({ id, s, start: a, end: e }); cursor = e; pos = hasPos(s) ? s : null; // 位置が分からない場所のあとは、つぎの移動も仮の時間にする
         });
         evs.push({ type: "slot", sl, items });
       }
     }
-    let arrive = cursor; if (cursor != null && pos && hasPos(da.pm)) arrive = cursor + travel(pos, da.pm).min;
+    let arrive = cursor; if (cursor != null && hasPos(da.pm)) arrive = cursor + (pos ? travel(pos, da.pm).min : UNK_LEG);
     add({ type: "base", slot: "pm", base: da.pm, arrive }, arrive != null && arrive > 1380 ? `夜の拠点に着くのが${fmtHM(arrive)}ごろになる目安です。` : "");
     return { evs, warns };
   }
@@ -1650,6 +1654,20 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const g = `https://www.google.com/maps/dir/?api=1&origin=${a.lat},${a.lng}&destination=${b.lat},${b.lng}&travelmode=${how === "徒歩" ? "walking" : how === "車" ? "driving" : how === "自転車" ? "bicycling" : "transit"}`;
     const ap = `https://maps.apple.com/?saddr=${a.lat},${a.lng}&daddr=${b.lat},${b.lng}&dirflg=${how === "車" ? "d" : how === "電車・バス" ? "r" : "w"}`;
     return [["経路", g], ["Appleマップ", ap]];
+  }
+  // 「起点→1つめ→2つめ→…→次の食事」の順に、となりあう2点をつなぐ。位置が分からない点があるときは、仮の時間だとわけを知らせ、位置を調べる・直す入口を出す
+  function legAny(a, b, text){
+    if (!a || !b) return null;
+    if (hasPos(a) && hasPos(b)) return legEl(a, b, text);
+    const d = el("div", "leg unk"), miss = [a, b].filter(x => !hasPos(x));
+    d.append(el("span", null, `${text} 移動時間は仮に${UNK_LEG}分（${miss.map(x => `「${x.name || "場所"}」`).join("・")}の位置が分からないため）`));
+    miss.filter(x => state.spots.some(y => y.id === x.id)).forEach(x => {
+      const bt = el("button", "link", "位置を調べる"); bt.type = "button";
+      bt.onclick = async () => { bt.textContent = "調べています…"; const ok = await locate(x.id); if (!ok) toast(`「${x.name}」の位置が見つかりません。「編集」で住所か「緯度, 経度」を入れてください`); };
+      const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => startEdit(x.id);
+      d.append(bt, ed);
+    });
+    return d;
   }
   function legEl(a, b, text){
     if (!hasPos(a) || !hasPos(b)) return null;
@@ -1786,11 +1804,11 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         if (!ids.length) z.append(el("div", "hint", "ここにカードをドロップ"));
         ev.items.forEach((it, idx) => {
           const s = it.s;
-          const lg = idx === 0 ? (anc ? legEl(anc.p, s, "↓") : null) : legEl(ev.items[idx - 1].s, s, "↓");
+          const lg = idx === 0 ? (anc ? legAny(anc.p, s, "↓") : null) : legAny(ev.items[idx - 1].s, s, "↓");
           if (lg) z.append(lg);
           z.append(chipFor(s, { num: true, time: `${fmtHM(it.start)}〜${fmtHM(it.end)}頃`, sub: distText(s, da) }));
         });
-        if (ids.length && nxt) { const lg = legEl(ev.items[ev.items.length - 1].s, nxt.p, `↓ ${nxt.label}へ`); if (lg) z.append(lg); }
+        if (ids.length && nxt) { const lg = legAny(ev.items[ev.items.length - 1].s, nxt.p, `↓ ${nxt.label}へ`); if (lg) z.append(lg); }
         // 起点（食事・拠点）から近い順に、まだ入れていない場所を出す
         const key = k + "|" + sl, sgb = el("button", "link sgb", sgOpen.has(key) ? "近くの場所の候補をとじる" : `${anc ? anc.label.replace(/（.*/, "") : "拠点"}から近い場所を探す`); sgb.type = "button";
         sgb.onclick = () => { if (sgOpen.has(key)) sgOpen.delete(key); else sgOpen.add(key); renderBoard(); };
