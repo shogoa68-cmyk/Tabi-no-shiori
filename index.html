@@ -343,7 +343,24 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <label>名前が読めませんでした。名前を入れてください<input id="qa-name" maxlength="60" placeholder="例：伏見稲荷大社"></label>
         <button class="btn small" type="button" id="qa-name-ok" style="align-self:flex-start">この名前で追加</button>
       </div>
+      <button class="btn ghost small" type="button" id="qa-clip" style="align-self:flex-start">コピーしたリンクを、貼らずに追加</button>
       <span class="msg" id="qa-msg" style="color:var(--accent)"></span>
+      <details class="qa-help">
+        <summary>共有メニューから、もっと手間なく追加する方法（ショートカット）</summary>
+        <div class="stack" style="gap:6px;margin-top:6px">
+          <p class="note" style="margin:0">iPhoneの「ショートカット」アプリで、1回だけ設定します。そのあとは、Googleマップの「共有」→「旅ナビに追加」を押すだけで、登録されます。</p>
+          <ol class="note" style="margin:0;padding-left:20px">
+            <li>「ショートカット」アプリを開き、右上の「＋」を押す。</li>
+            <li>「アクションを追加」で「URLをエンコード」（URLエンコード）を探して追加する。入力は「ショートカットの入力」にする。</li>
+            <li>「URL」のアクションを追加し、下のアドレスを入れて、そのうしろに、さっきの「エンコードされたテキスト」をつなげる。</li>
+            <li>「URLを開く」のアクションを追加する。</li>
+            <li>画面の下の「i」（詳細）で、「共有シートに表示」をオンにし、受け取るものを「URL」「テキスト」にする。名前を「旅ナビに追加」にする。</li>
+          </ol>
+          <label>URLに入れるアドレス<input id="qa-tpl" readonly aria-label="ショートカットに入れるアドレス"></label>
+          <button class="btn ghost small" type="button" id="qa-tpl-copy" style="align-self:flex-start">アドレスをコピー</button>
+          <p class="note" style="margin:0">注意：この方法は、Safariで旅ナビが開きます。ホーム画面のアプリとは、データが別々です。Googleでログインしておくと、同じリストが出ます。</p>
+        </div>
+      </details>
     </section>
     <div class="row" style="justify-content:space-between" id="spots-head" data-v="spots">
       <h2 id="h-spots">行きたい場所のリスト <span class="note" id="count"></span></h2>
@@ -2424,12 +2441,28 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     } else info = { name: raw };
     $("qa-add").disabled = false;
     if (!info || !info.name) { qaPending = Object.assign({}, info || {}, { map }); $("qa-name-box").hidden = false; $("qa-name").focus(); msg.textContent = u ? (info ? "リンクは読めましたが、名前がありません。" : "このリンクは読めませんでした。名前を入れると、リンクつきで追加します。") : ""; return; }
-    const t = addSpotQuick(Object.assign({}, info, { map }));
+    // すでに同じ場所（同じリンク、または同じ名前と住所）があれば、ふやさない
+    const dup = state.spots.find(x => (map && x.map && cleanMapUrl(x.map) === map) || (x.name === info.name && (x.address || "") === (info.address || "")));
     $("qa-url").value = ""; $("qa-name-box").hidden = true; qaPending = null;
+    if (dup) { msg.textContent = `「${dup.name}」は、もう入っています。`; toast(`「${dup.name}」は、もう入っています`); return; }
+    const t = addSpotQuick(Object.assign({}, info, { map }));
     msg.textContent = `「${t.name}」を追加しました。下の登録リストから、日ごとの枠へ入れられます。`;
+    toast(`「${t.name}」を追加しました`);
     $("qa-url").focus();
   }
   $("qa-add").onclick = quickAdd;
+  // コピーしたリンクを、貼らずに追加（iPhone では「ペースト」の確認が1回出る）
+  $("qa-clip").onclick = async () => {
+    const msg = $("qa-msg");
+    try {
+      const t = ((await navigator.clipboard.readText()) || "").trim();
+      if (!t) { msg.textContent = "コピーしたものがありません。Googleマップで「共有」→「コピー」を押してください。"; return; }
+      if (!/https?:\/\//.test(t) && t.length > 40) { msg.textContent = "Googleマップのリンクではないようです。"; return; }
+      $("qa-url").value = t; quickAdd();
+    } catch { msg.textContent = "コピーしたものを読めませんでした。入力欄に貼りつけてください。"; $("qa-url").focus(); }
+  };
+  $("qa-tpl").value = location.origin + location.pathname + "?add=";
+  $("qa-tpl-copy").onclick = async () => { toast(await copyText($("qa-tpl").value) ? "アドレスをコピーしました" : "コピーできませんでした。長押しでコピーしてください"); };
   $("qa-url").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); quickAdd(); } });
   $("qa-url").addEventListener("paste", () => setTimeout(() => { if (/https?:\/\//.test($("qa-url").value)) quickAdd(); }, 0));
   $("qa-name-ok").onclick = () => {
@@ -2483,6 +2516,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("menu-bg").onclick = closeMenu;
   $("sub-back").onclick = () => goBack("main");
   applyView();
+  // ?add=（Googleマップのリンクなど）で開くと、そのまま登録する（iPhoneの「ショートカット」から使う）
+  { const q = new URLSearchParams(location.search).get("add");
+    if (q) { stripParams("add"); $("qa-url").value = q; quickAdd(); } }
 
   // ---------- Claude へのお願い文を作る ----------
   const SITUATION = {
