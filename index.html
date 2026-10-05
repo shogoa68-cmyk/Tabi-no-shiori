@@ -127,6 +127,14 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
 .sheet-body{position:relative;width:100%;max-width:560px;max-height:calc(100dvh - 24px);overflow:auto;background:var(--paper);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
 .mealbtn,.basebtn{font-size:13px;font-weight:700}
+.bulkbar{order:4;position:sticky;bottom:10px;z-index:8;background:var(--paper);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.spot.bsel{border-color:var(--accent)}
+.spot .bchk{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+.areah{font-family:var(--display);font-size:14px;margin:8px 0 -2px;display:flex;gap:10px;align-items:center}
+.areah small{color:var(--muted);font-weight:400}
+.areanote{font-size:12px;color:var(--accent);font-weight:700;margin:-2px 0 6px}
+.dchip.am{outline:2px solid var(--accent);outline-offset:-1px}
+.pillbtn[aria-pressed=true]{background:var(--accent);border-style:solid;color:#fff}
 .tm{display:inline-block;min-width:50px;margin-right:4px;font-family:var(--mono);font-size:12.5px;color:var(--muted)}
 .tm.fx{color:var(--ink);font-weight:500}
 .pillbtn{font:inherit;font-size:12.5px;font-weight:700;border:1.5px dashed var(--accent);background:transparent;color:var(--accent);border-radius:99px;padding:3px 11px;cursor:pointer;line-height:1.5}
@@ -365,6 +373,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     <div class="row" style="justify-content:space-between" id="spots-head" data-v="spots">
       <h2 id="h-spots">行きたい場所のリスト <span class="note" id="count"></span></h2>
       <label class="row" style="flex-direction:row;gap:6px;font-size:13px"><input type="checkbox" id="show-done" style="width:auto"> 行った所も表示</label>
+      <div class="row" id="spots-tools" style="flex-basis:100%;gap:8px">
+        <button class="pillbtn" id="bulk-toggle" type="button">まとめて選ぶ</button>
+        <button class="pillbtn" id="area-sort" type="button" aria-pressed="false">エリア順にする</button>
+      </div>
     </div>
     <section class="card stack vmain" id="trip-card" hidden aria-label="旅の切りかえ" style="gap:8px">
       <div class="row" style="flex-wrap:nowrap">
@@ -445,6 +457,12 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     </details>
     <p class="note only-plan" data-v="spots" id="spots-note" style="margin:0">営業時間・滞在時間・メモなどの詳細は、あとで「編集」から入れられます。まだ入っていない項目は、カードに印が出ます。</p>
     <div class="spots" id="spots" data-v="spots"></div>
+    <div class="bulkbar" id="bulk-bar" data-v="spots" hidden>
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b id="bulk-count">0か所を選んでいます</b><span class="row" style="gap:10px"><button class="link" type="button" id="bulk-all">ぜんぶ選ぶ</button><button class="link" type="button" id="bulk-none">解除</button></span></div>
+      <div class="row" style="flex-wrap:nowrap"><input id="bulk-area" list="area-list" maxlength="40" placeholder="エリア名（例：新潟市）" aria-label="まとめて変えるエリア名" style="flex:1;min-width:0"><button class="btn small" type="button" id="bulk-apply">エリアを変える</button></div>
+      <button class="link" type="button" id="bulk-clear" style="align-self:flex-start">選んだ場所のエリアを消す</button>
+    </div>
+    <datalist id="area-list"></datalist>
 
     <details class="card" id="add-box" data-v="edit">
       <summary id="add-title">場所を詳しく入れる・編集する</summary>
@@ -463,7 +481,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           </div>
         </div>
         <div class="grid">
-          <label>エリア<input id="s-area" maxlength="60" placeholder="例：伏見区"></label>
+          <label>エリア<input id="s-area" maxlength="60" list="area-list" placeholder="例：伏見区"></label>
           <label>滞在したい時間
             <select id="s-stay"><option value="">おまかせ</option><option value="15">15分</option><option value="30">30分</option><option value="60">1時間</option><option value="90">1時間半</option><option value="120">2時間</option><option value="180">3時間</option></select></label>
           <label>営業時間<input id="s-hours" maxlength="40" placeholder="例：9:00〜17:00"></label>
@@ -1177,18 +1195,49 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
   function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); }
+  // まとめて選んで、エリアを変える
+  let bulkMode = false; const bulkSel = new Set();
+  function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; }
+  function applyBulk(v){
+    const ids = [...bulkSel].filter(id => state.spots.some(x => x.id === id));
+    if (!ids.length) { toast("まず、場所を選んでください"); return; }
+    state.spots.forEach(s => { if (ids.includes(s.id)) { if (v) s.area = v; else delete s.area; cloudMark(s.id, "up"); } });
+    save(); toast(v ? `${ids.length}か所のエリアを「${v}」にしました` : `${ids.length}か所のエリアを消しました`);
+    bulkSel.clear(); $("bulk-area").value = ""; renderSpots();
+  }
   function renderSpotList(){
     const box = $("spots"); box.textContent = "";
     const showDone = $("show-done").checked;
     const left = state.spots.filter(s => !s.done).length;
     $("count").textContent = state.spots.length ? `のこり ${left} / ${state.spots.length}` : "";
-    const list = sorted().filter(s => showDone || !s.done);
+    let list = sorted().filter(s => showDone || !s.done);
+    const bySort = state.settings["spot-sort"] === "area";
+    $("bulk-toggle").textContent = bulkMode ? "選ぶのをやめる" : "まとめて選ぶ"; $("bulk-toggle").setAttribute("aria-pressed", bulkMode ? "true" : "false");
+    $("area-sort").textContent = bySort ? "ふつうの順にもどす" : "エリア順にする"; $("area-sort").setAttribute("aria-pressed", bySort ? "true" : "false");
+    $("bulk-bar").hidden = !bulkMode; updateBulk();
+    refreshAreaList();
     if (!state.spots.length) { box.append(el("div","empty","まだありません。下の「場所を追加」から、行きたい場所を入れておこう。")); return; }
     if (!list.length) { box.append(el("div","empty","ぜんぶ行きました！ 「近くのおすすめ」を聞いてみよう。")); return; }
+    // エリア順：エリア名の順に、見出しをつけて並べる（エリアが空の場所は、さいごに）
+    const headOf = new Map();
+    if (bySort) {
+      const key = s => (s.area || "").trim();
+      list = [...list].sort((a, b) => (key(a) === "" ? 1 : 0) - (key(b) === "" ? 1 : 0) || key(a).localeCompare(key(b), "ja"));
+      const cnt = {}; list.forEach(s => { cnt[key(s)] = (cnt[key(s)] || 0) + 1; });
+      list.forEach(s => { if (!headOf.has(key(s))) headOf.set(key(s), { name: key(s), n: cnt[key(s)], first: s.id }); });
+    }
     for (const s of list) {
-      const c = el("article","card spot" + (s.done ? " done" : ""));
-      const chk = el("input","chk"); chk.type = "checkbox"; chk.checked = !!s.done; chk.setAttribute("aria-label", `${s.name} に行った`);
-      chk.onchange = () => { s.done = chk.checked; save(); cloudMark(s.id, "up"); renderSpots(); toast(s.done ? `「${s.name}」を行った所にしました` : "未訪問に戻しました"); };
+      const hd = bySort ? [...headOf.values()].find(h => h.first === s.id) : null;
+      if (hd) {
+        const h = el("div", "areah"); h.dataset.area = hd.name; h.append(el("b", null, hd.name || "エリアなし"), el("small", null, `${hd.n}か所`));
+        if (bulkMode) { const sel = el("button", "link", "このエリアを選ぶ"); sel.type = "button"; sel.onclick = () => { list.filter(x => (x.area || "").trim() === hd.name).forEach(x => bulkSel.add(x.id)); renderSpotList(); }; h.append(sel); }
+        box.append(h);
+      }
+      const c = el("article","card spot" + (s.done ? " done" : "") + (bulkMode && bulkSel.has(s.id) ? " bsel" : ""));
+      const chk = el("input","chk"); chk.type = "checkbox";
+      if (bulkMode) { chk.className = "bchk"; chk.checked = bulkSel.has(s.id); chk.setAttribute("aria-label", `${s.name} を選ぶ`); chk.onchange = () => { if (chk.checked) bulkSel.add(s.id); else bulkSel.delete(s.id); c.classList.toggle("bsel", chk.checked); updateBulk(); }; }
+      else { chk.checked = !!s.done; chk.setAttribute("aria-label", `${s.name} に行った`);
+        chk.onchange = () => { s.done = chk.checked; save(); cloudMark(s.id, "up"); renderSpots(); toast(s.done ? `「${s.name}」を行った所にしました` : "未訪問に戻しました"); }; }
       const body = el("div","body");
       body.append(el("div","stars", "★".repeat(s.prio) + "☆".repeat(3 - s.prio)), el("div","nm", s.name));
       const meta = [s.kind, s.area, s.stay ? "滞在 " + stayText(s.stay) : "", s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.when].filter(Boolean).join("・");
@@ -1248,7 +1297,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (i < 0) i = list.indexOf(dkey(new Date()));
     if (i < 0) i = 0;
     const am = effBase(list, i, "am"), pm = effBase(list, i, "pm");
-    return { i, date: list[i], moves: movesOf(list[i]), today: list[i] === dkey(new Date()), meals: mealsOf(list[i]), am, pm, same: hasBase(am) && hasBase(pm) && sameBase(am, pm), n: list.length };
+    return { i, date: list[i], area: areaOfDay(list[i]), moves: movesOf(list[i]), today: list[i] === dkey(new Date()), meals: mealsOf(list[i]), am, pm, same: hasBase(am) && hasBase(pm) && sameBase(am, pm), n: list.length };
   }
   // ---- 距離（直線） ----
   function km(a, b){
@@ -1348,7 +1397,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   function planSummary(list, i){
     const am = effBase(list, i, "am"), pm = effBase(list, i, "pm");
     const n = Object.keys(mealsOf(list[i])).length, mv = movesOf(list[i]).length;
-    return `${dayLabel(list[i], i)}　朝：${am ? baseName(am) : "未設定"}／夜：${pm ? baseName(pm) : "未設定"}${mv ? `　外せない移動${mv}件` : ""}${n ? `　食事${n}件` : ""}`;
+    return `${dayLabel(list[i], i)}${areaOfDay(list[i]) ? "　エリア：" + areaOfDay(list[i]) : ""}　朝：${am ? baseName(am) : "未設定"}／夜：${pm ? baseName(pm) : "未設定"}${mv ? `　外せない移動${mv}件` : ""}${n ? `　食事${n}件` : ""}`;
   }
   // 入れていない欄に、「前の夜と同じ」などの目安を薄く出す／位置の取得状況を出す
   function refreshPlanLabels(){
@@ -1409,11 +1458,30 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const moveText = m => `${m.dep || "時刻未定"}発${m.arr ? "→" + m.arr + "着" : ""}　${m.from || "?"}→${m.to || "?"}（${m.kind || "移動"}${m.name ? " " + m.name : ""}）${m.memo ? "　" + m.memo : ""}`;
   // 乗り場に着いておきたい余裕（目安）
   const moveMargin = m => m.kind === "飛行機" ? "1時間" : "30分";
+  // ---- エリア（行きたい場所の `area` と、日ごとの `area`。合うものを先に並べる） ----
+  const normA = t => String(t || "").trim().toLowerCase();
+  const areaOfDay = k => ((state.plan.days[k] || {}).area || "").trim();
+  const areaMatch = (a, b) => { a = normA(a); b = normA(b); return !!a && !!b && (a === b || a.includes(b) || b.includes(a)); }; // 「新潟」と「新潟市」も合う
+  const allAreas = () => [...new Set(state.spots.map(s => (s.area || "").trim()).filter(Boolean))];
+  function refreshAreaList(){ const dl = $("area-list"); if (!dl) return; dl.textContent = ""; allAreas().forEach(a => { const o = document.createElement("option"); o.value = a; dl.append(o); }); }
   function pruneDay(k){
     const day = state.plan.days[k]; if (!day) return;
+    if (day.area != null && !String(day.area).trim()) delete day.area;
     if (Array.isArray(day.moves) && !day.moves.length) delete day.moves;
     if (day.slots) { Object.keys(day.slots).forEach(n => { if (!Array.isArray(day.slots[n]) || !day.slots[n].length) delete day.slots[n]; }); if (!Object.keys(day.slots).length) delete day.slots; }
-    if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots) delete state.plan.days[k];
+    if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots && !day.area) delete state.plan.days[k];
+  }
+  // その日の「エリア」の入力欄（日ごとの詳細と、日ごとの画面の窓の両方で使う）
+  function areaBox(k){
+    const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.areabox = k;
+    box.append(el("span", "note", "この日のエリア（例：新潟市、湯沢）。登録リストでは、このエリアの場所が先に並びます。"));
+    const inp = mkInput("a-in", "この日のエリア", 40); inp.setAttribute("list", "area-list"); inp.placeholder = "エリア名（空なら指定なし）"; inp.value = areaOfDay(k);
+    const commit = v => { v = v.trim(); const day = state.plan.days[k] = state.plan.days[k] || {}; if (v) day.area = v; else delete day.area; pruneDay(k); changePlan(); refreshPlanLabels(); };
+    inp.onchange = () => commit(inp.value);
+    box.append(inp);
+    const as = allAreas();
+    if (as.length) { const chips = el("div", "row"); chips.style.gap = "6px"; as.forEach(a => { const b = el("button", "pillbtn", a); b.type = "button"; b.onclick = () => { inp.value = a; commit(a); }; chips.append(b); }); box.append(el("span", "note", "登録した場所のエリア（タップで入れる）"), chips); }
+    return box;
   }
   // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
   function moveForm(k, mv, done){
@@ -1615,8 +1683,30 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     boardDay = k;
     document.querySelectorAll("#board .dayv").forEach(d => { d.hidden = d.dataset.date !== k; });
     document.querySelectorAll("#board .dtab").forEach(t => t.classList.toggle("on", t.dataset.date === k));
+    refreshTray(); // 日がかわると、エリアに合う場所の並びもかわる
     const on = document.querySelector("#board .dtab.on"), tb = $("board-tabs"); if (on && tb) tb.scrollLeft = on.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; // タブの列だけ動かす（ページは動かさない）
   };
+  // 登録リスト（画面の下に固定。横にスクロール）。いま見ている日のエリアに合う場所を、先に並べる
+  function buildTray(open){
+    const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
+    const compact = state.settings["tray-view"] !== "detail"; tray.classList.toggle("compact", compact);
+    const th = el("div", "th"); th.append(el("b", null, "登録リスト"));
+    const lb = el("label"), cb = el("input"); cb.type = "checkbox"; cb.checked = boardOnly; cb.id = "board-unused"; cb.onchange = () => { boardOnly = cb.checked; renderBoard(); };
+    lb.append(cb, document.createTextNode("未配置のみ"));
+    const tv = el("span", "tview"); tv.setAttribute("role", "group"); tv.setAttribute("aria-label", "登録リストの表示");
+    [["compact", "コンパクト"], ["detail", "くわしく"]].forEach(([v, t]) => { const b = el("button", null, t); b.type = "button"; b.dataset.tv = v; b.setAttribute("aria-pressed", (compact ? "compact" : "detail") === v ? "true" : "false"); b.onclick = () => { state.settings["tray-view"] = v; save(); renderBoard(); }; tv.append(b); });
+    const ctl = el("span", "tctl"); ctl.append(tv, lb); th.append(ctl);
+    const strip = el("div", "strip");
+    const ar = areaOfDay(boardDay), isAm = s => !!ar && areaMatch(s.area, ar);
+    let shown = open.filter(s => !boardOnly || !whereIs(s.id));
+    if (ar) shown = [...shown.filter(isAm), ...shown.filter(s => !isAm(s))]; // エリアが合うものを先に（それぞれの中は、もとの順）
+    if (!shown.length) strip.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
+    shown.forEach(s => { const w = whereIs(s.id); strip.append(chipFor(s, { tag: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : isAm(s) ? "エリア内" : "", sub: s.area || "" })); if (w) strip.lastChild.classList.add("used"); if (isAm(s)) strip.lastChild.classList.add("am"); });
+    tray.append(th, strip);
+    if (ar) th.after(el("div", "areanote", `エリア「${ar}」の場所を先に並べています`));
+    return tray;
+  }
+  function refreshTray(){ const old = $("board-tray"); if (!old || dragging) return; old.replaceWith(buildTray(sorted().filter(s => !s.done))); }
   function renderBoard(){
     if (dragging) { boardDirty = true; return; }
     boardDirty = false;
@@ -1656,7 +1746,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const act = el("div", "dayact");
       const amv = el("button", "pillbtn addmv", "＋ 外せない移動（新幹線・飛行機）"); amv.type = "button"; amv.onclick = () => openSheet(`${dtext}　外せない移動を追加`, moveForm(k, null, closeSheet));
       const aex = el("button", "pillbtn exp", "この日をカレンダーへ"); aex.type = "button"; aex.dataset.date = k; aex.onclick = () => exportIcs([k]);
-      act.append(amv, aex); dv.append(act);
+      const aar = el("button", "pillbtn areabtn", areaOfDay(k) ? `エリア：${areaOfDay(k)}` : "＋ エリアを入れる"); aar.type = "button"; aar.dataset.date = k;
+      aar.onclick = () => openSheet(`${dtext}　エリア`, areaBox(k));
+      act.append(aar, amv, aex); dv.append(act);
       const rail = el("div", "rail");
       // 拠点（出発・到着）：入っていなければ、タップして入れる
       const baseNode = ev => {
@@ -1723,19 +1815,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       dv.append(rail); days.append(dv);
     });
     // 登録リスト（画面の下に固定。横にスクロール）
-    const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
-    const compact = state.settings["tray-view"] !== "detail"; tray.classList.toggle("compact", compact);
-    const th = el("div", "th"); th.append(el("b", null, "登録リスト"));
-    const lb = el("label"), cb = el("input"); cb.type = "checkbox"; cb.checked = boardOnly; cb.id = "board-unused"; cb.onchange = () => { boardOnly = cb.checked; renderBoard(); };
-    lb.append(cb, document.createTextNode("未配置のみ"));
-    const tv = el("span", "tview"); tv.setAttribute("role", "group"); tv.setAttribute("aria-label", "登録リストの表示");
-    [["compact", "コンパクト"], ["detail", "くわしく"]].forEach(([v, t]) => { const b = el("button", null, t); b.type = "button"; b.dataset.tv = v; b.setAttribute("aria-pressed", (compact ? "compact" : "detail") === v ? "true" : "false"); b.onclick = () => { state.settings["tray-view"] = v; save(); renderBoard(); }; tv.append(b); });
-    const ctl = el("span", "tctl"); ctl.append(tv, lb); th.append(ctl);
-    const strip = el("div", "strip");
-    const shown = open.filter(s => !boardOnly || !whereIs(s.id));
-    if (!shown.length) strip.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
-    shown.forEach(s => { const w = whereIs(s.id); strip.append(chipFor(s, { tag: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : "", sub: s.area || "" })); if (w) strip.lastChild.classList.add("used"); });
-    tray.append(th, strip);
+    const tray = buildTray(open);
     const expRow = el("div", "dayact"); expRow.id = "board-export";
     const eall = el("button", "pillbtn exp", "全部の日をカレンダーへ"); eall.type = "button"; eall.id = "exp-all"; eall.onclick = () => exportIcs(list);
     expRow.append(eall, el("span", "note", "iPhoneのカレンダーに入れるファイルを作ります。「頃」の時刻は目安です。"));
@@ -1985,7 +2065,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const wasOpen = new Set([...box.querySelectorAll(":scope > details[open]")].map(d => d.dataset.date));
     box.textContent = "";
     if (!list.length) { box.append(el("p", "note", "開始日と終了日を入れると、日ごとの拠点を登録できます。")); renderDayLine(); renderSpots(); return; }
-    list.forEach(k => { const d = el("details", "rt"); d.dataset.date = k; d.open = wasOpen.has(k); d.append(el("summary", null, "")); const w = el("div", "stack"); w.style.gap = "12px"; w.append(moveEditor(k), slotEditor(k, "am"), slotEditor(k, "pm"), mealEditor(k)); d.append(w); box.append(d); });
+    list.forEach(k => { const d = el("details", "rt"); d.dataset.date = k; d.open = wasOpen.has(k); d.append(el("summary", null, "")); const w = el("div", "stack"); w.style.gap = "12px"; w.append(areaBox(k), moveEditor(k), slotEditor(k, "am"), slotEditor(k, "pm"), mealEditor(k)); d.append(w); box.append(d); });
     refreshPlanLabels(); renderDayLine(); renderSpots();
   }
   function renderPlanNote(){
@@ -2470,6 +2550,12 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const t = addSpotQuick(Object.assign({}, qaPending || {}, { name: nm }));
     $("qa-name").value = ""; $("qa-url").value = ""; $("qa-name-box").hidden = true; qaPending = null; $("qa-msg").textContent = `「${t.name}」を追加しました。`;
   };
+  $("bulk-toggle").onclick = () => { bulkMode = !bulkMode; if (!bulkMode) bulkSel.clear(); renderSpotList(); };
+  $("area-sort").onclick = () => { state.settings["spot-sort"] = state.settings["spot-sort"] === "area" ? "" : "area"; save(); renderSpotList(); };
+  $("bulk-all").onclick = () => { sorted().filter(s => $("show-done").checked || !s.done).forEach(s => bulkSel.add(s.id)); renderSpotList(); };
+  $("bulk-none").onclick = () => { bulkSel.clear(); renderSpotList(); };
+  $("bulk-apply").onclick = () => { const v = $("bulk-area").value.trim(); if (!v) { toast("エリア名を入れてください"); return; } applyBulk(v); };
+  $("bulk-clear").onclick = () => applyBulk("");
   renderPlan();
   applyMode();
   // ---------- 別画面（右上のメニューから行く）：1つの画面にぜんぶ並べず、見たいものだけを出す ----------
@@ -2539,6 +2625,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     L.push("## いま");
     L.push(`- 日時：${fmtDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`);
     if (ad) L.push(`- ${ad.today ? "今日" : "対象の日"}は旅の${ad.i + 1}日目（${md(ad.date)}）。朝の拠点：${fmtBase(ad.am)}${ad.same ? "（夜も同じ）" : `／夜の拠点：${fmtBase(ad.pm)}`}`);
+    if (ad && ad.area) L.push(`- 今日のエリア：${ad.area}`);
     if (h) {
       const age = Math.round((Date.now() - h.at) / 60000);
       L.push(`- 現在地：${h.address ? h.address + " " : ""}(${h.lat},${h.lng})${age <= 1 ? "" : `（${age}分前の位置${age > 15 ? "。いまは移動しているかも" : ""}）`}`);
@@ -2558,11 +2645,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const mine = ad ? slotLine(ad.date) : "";
     const picked = s => ad && !!whereIs(s.id) && whereIs(s.id).k === ad.date; // 自分でこの日に入れた場所は、距離で外さない
     const todo = open.filter(s => picked(s) || inRadius(s, ad)), far = open.filter(s => !picked(s) && !inRadius(s, ad));
+    // 今日のエリアに合う場所を、先に並べる
+    if (ad && ad.area) { const am = todo.filter(s => areaMatch(s.area, ad.area)), ot = todo.filter(s => !areaMatch(s.area, ad.area)); todo.length = 0; todo.push(...am, ...ot); }
     if (mine) L.push("## 自分で組んだ今日の予定（この区分と順番で回りたい）", `- ${mine}`, "");
     L.push(`## 行きたい場所（上ほど優先${radiusKm() ? `。拠点から${radiusKm()}km以内に絞った` : ""}）`);
     if (!todo.length) L.push("- なし");
     todo.forEach((s, i) => {
-      const info = [s.kind, s.address || s.area, sharedOn() && cloud.members.length > 1 && likeIds(s.id).length ? "行きたい" + likeIds(s.id).length + "人" : "", ...distInfo(s, ad).map(x => `${x.label}から${fmtKm(x.km)}`), ...(nearestHub(s) ? [`最寄りの${nearestHub(s).h.kind}：${nearestHub(s).h.name}（${fmtKm(nearestHub(s).d)}）`] : []), s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
+      const info = [s.kind, ad && ad.area && areaMatch(s.area, ad.area) ? "今日のエリア" : "", s.address || s.area, sharedOn() && cloud.members.length > 1 && likeIds(s.id).length ? "行きたい" + likeIds(s.id).length + "人" : "", ...distInfo(s, ad).map(x => `${x.label}から${fmtKm(x.km)}`), ...(nearestHub(s) ? [`最寄りの${nearestHub(s).h.kind}：${nearestHub(s).h.name}（${fmtKm(nearestHub(s).d)}）`] : []), s.stay ? "滞在" + stayText(s.stay) : "", s.hours ? "営業" + s.hours : "", s.closed ? "定休" + s.closed : "", s.when ? "希望" + s.when : ""].filter(Boolean).join("／");
       // 地図リンクは、住所がないときだけ、短いものに限って入れる
       const map = s.map && !s.address && s.map.length <= 80 ? " " + s.map : "";
       L.push(`${i+1}. ${"★".repeat(s.prio)}${s.name}${info ? "（" + info + "）" : ""}${s.memo ? " " + s.memo.replace(/\s+/g, " ") : ""}${map}`);
@@ -2580,6 +2669,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       ...(todo.some(x => distInfo(x, ad).length || nearestHub(x)) ? [`- ${hubs().length ? "拠点や交通の拠点" : "拠点"}からの距離は直線距離。実際の道のりや電車の時間は調べなおす`] : []),
       ...(hubs().length ? ["- 登録した交通の拠点（駅・バス停など）を乗り降りの起点にして、乗る駅・降りる駅（バス停）とのりかえを書く"] : []),
       ...(mealLines.length ? ["- 食事の希望は、できるだけ生かして時間を組む（ルートの都合で、時間や場所は変えてもよい）。希望のない食事は、ルートの近くで探してよい"] : []),
+      ...(ad && ad.area ? [`- 今日のエリア（${ad.area}）の場所を優先して組む。ほかのエリアの場所は、近いときだけ入れる`] : []),
       ...(mine ? ["- 「自分で組んだ今日の予定」の区分（午前・午後・夜）と順番を基本にして時刻を組む。無理なら入れかえてよいが、理由を書く"] : []),
       ...(moveLines.length ? [`- 外せない移動は、時刻も乗り場も動かさない。出発の${ad.moves.some(m => m.kind === "飛行機") ? "30分〜1時間" : "30分"}前までに乗り場に着けるよう、他の予定をその前後に収める。間に合わない予定は外し、危ういときは正直に伝える`] : []),
       "- 移動ごとに出発時刻・手段（路線やバス停）・所要時間・運賃の目安と、Googleマップの経路リンク",
@@ -2607,12 +2697,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   // 旅の前の計画用：行きたい場所を、拠点からの距離で日ごとに割りふってもらう
   function buildPlanPrompt(){
-    const list = dayList(), S = id => $(id).value.trim(), bases = []; let anyMeal = false, anyMove = false, anyOwn = false;
+    const list = dayList(), S = id => $(id).value.trim(), bases = []; let anyMeal = false, anyMove = false, anyOwn = false, anyArea = false;
     const keyOf = b => (b.name || "") + "|" + (b.address || "");
     const letter = b => { const k = keyOf(b); let i = bases.findIndex(x => keyOf(x) === k); if (i < 0) { bases.push(b); i = bases.length - 1; } return String.fromCharCode(65 + i); };
     const L = ["旅先の案内係として、旅全体の日割りプランを考えてください。", "", "## 日程と拠点"];
     list.forEach((k, i) => { const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"); L.push(`- ${dayLabel(k, i)} 朝:${am ? letter(am) : "なし"} 夜:${pm ? letter(pm) : "なし"}`);
       const ml = MEALS.filter(([key]) => hasMeal(mealsOf(k)[key])).map(([key, label]) => `${label} ${mealText(mealsOf(k)[key], k)}`);
+      const ar = areaOfDay(k); if (ar) { L.push(`  エリア：${ar}`); anyArea = true; }
       const own = slotLine(k); if (own) { L.push(`  自分で組みずみ：${own}`); anyOwn = true; }
       const mvl = movesOf(k).map(moveText);
       if (mvl.length) { L.push(`  外せない移動（動かせない）：${mvl.join("／")}`); anyMove = true; }
@@ -2637,6 +2728,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       "- 1日ごとに、順番・滞在時間・移動手段と所要時間の目安。到着日と出発日は予定を軽めに",
       "- 距離は直線距離。実際の道のりや電車の時間は調べなおす",
       ...(hubs().length ? ["- 登録した交通の拠点（駅・バス停など）を乗り降りの起点にして、日ごとに乗る駅・降りる駅（バス停）を書く"] : []),
+      ...(anyArea ? ["- 日ごとの「エリア」に合う場所（場所のエリアと同じ、または近い）を、その日に割りふる。エリアのちがう場所は、近いときだけ"] : []),
       ...(anyOwn ? ["- 「自分で組みずみ」の場所は、その日・その区分のまま変えない。まだ入れていない場所だけを割りふる"] : []),
       ...(anyMove ? ["- 日ごとの「外せない移動」は動かせない。時刻と乗り場を守り、その前後（乗り場に着く余裕を含む）に他の予定を収める。収まらない日は、正直に伝える"] : []),
       ...(anyMeal ? ["- 日ごとの食事の希望は、できるだけ生かす（ルートの都合で変えてもよい）。希望のない食事は、その日のルートの近くで探してよい"] : []),
