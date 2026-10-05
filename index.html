@@ -123,10 +123,12 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 .dchip.ins{box-shadow:0 -4px 0 var(--bar,var(--accent))}
 .dchip.ghost{position:fixed;z-index:50;pointer-events:none;box-shadow:0 8px 22px rgba(0,0,0,.3);opacity:.96;left:0;top:0;transform-origin:0 0}
 .dchip.ghost .no{display:none}
+.dchip .cedit{font-size:12.5px;font-weight:700;flex:none}
 .sheet{position:fixed;inset:0;z-index:40;display:flex;justify-content:center;align-items:flex-start;padding:max(10px,env(safe-area-inset-top,0px)) 10px 10px}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
 .sheet-body{position:relative;width:100%;max-width:560px;max-height:calc(100dvh - 24px);overflow:auto;background:var(--paper);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
 .mealbtn,.basebtn{font-size:13px;font-weight:700}
+.sheet-body>.row:first-child{position:sticky;top:0;margin:-14px -14px 0;padding:14px 14px 8px;background:var(--paper);z-index:3;border-radius:16px 16px 0 0}
 .bulkbar{order:4;position:sticky;bottom:10px;z-index:8;background:var(--paper);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spot.bsel{border-color:var(--accent)}
 .spot .bchk{width:22px;height:22px;flex:none;accent-color:var(--accent)}
@@ -1271,7 +1273,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const m = el("a", null, "地図"); m.href = s.map && /^https?:\/\//i.test(s.map) ? s.map : mapsQ(`${s.name} ${s.area || ""}`.trim()); m.target = "_blank"; m.rel = "noopener"; m.style.fontSize = "13px";
       const ed = el("button","link","編集"); ed.type = "button"; ed.onclick = () => startEdit(s.id);
       const del = el("button","link","削除"); del.type = "button";
-      del.onclick = () => { if (del.dataset.sure) { state.spots = state.spots.filter(x => x.id !== s.id); if (whereIs(s.id)) { unassign(s.id); cloudMarkPlan(); } save(); cloudMark(s.id, "del"); renderSpots(); } else { del.dataset.sure = "1"; del.textContent = "本当に？"; del.style.color = "var(--star)"; } };
+      del.onclick = () => { if (del.dataset.sure) { deleteSpot(s.id); } else { del.dataset.sure = "1"; del.textContent = "本当に？"; del.style.color = "var(--star)"; } };
       ops.append(m, ed, del);
       c.append(chk, body, ops); box.append(c);
     }
@@ -1714,8 +1716,10 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (opt.sub) nm.append(el("span", "sub", opt.sub));
     if (opt.tag) { nm.append(document.createElement("br")); nm.append(el("span", "tag", opt.tag)); }
     nm.append(mapLink(spotMapUrl(s), "Googleマップ")); // 登録したGoogleマップのリンク（なければ名前で検索）
+    nm.style.cursor = "pointer"; nm.onclick = e => { if (e.target.closest && e.target.closest("a")) return; editSpotCard(s.id); }; // 名前のあたりをタップすると、詳細を編集できる
     if (opt.num) {
       c.append(el("span", "no"), nm, handle());
+      const ed = el("button", "link cedit", "編集"); ed.type = "button"; ed.setAttribute("aria-label", `${s.name}の詳細を編集`); ed.onclick = () => editSpotCard(s.id); c.append(ed);
       const x = el("button", "link", "×"); x.type = "button"; x.setAttribute("aria-label", `${s.name}を外す`); x.onclick = () => { unassign(s.id); changePlan(); }; c.append(x);
     } else c.append(handle(), nm); // 登録リストのカード：左のつまみで動かす。カードのほかの場所をなぞると、リストが横にスクロールする
     if (opt.used) c.classList.add("used");
@@ -2080,13 +2084,17 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (r !== "cancel") toast(`${count}件の予定のファイルを作りました。開いて「カレンダーに追加」を押してください`);
   }
   // 画面のまんなかに開く入力の窓（食事・拠点・外せない移動の入力に使う）
+  // 場所の入力欄（`#spot-form`）を窓に借りているときは、窓をかたづける前に、もとの場所へ返す
+  function returnSpotForm(){ const f = $("spot-form"); if (f && $("ms-box").contains(f)) { $("add-box").append(f); resetForm(); return true; } return false; }
   function openSheet(title, node){
+    returnSpotForm();
     $("ms-title").textContent = title;
     const host = $("ms-box"); host.textContent = ""; host.append(node);
     $("meal-sheet").hidden = false;
   }
   function closeSheet(){
     if ($("meal-sheet").hidden) return;
+    returnSpotForm();
     $("meal-sheet").hidden = true; $("ms-box").textContent = "";
     renderPlan(); // 「日ごとの詳細」の入力欄にも反映する
   }
@@ -2423,16 +2431,28 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     prio = 2; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", c.dataset.p === "2" ? "true" : "false"));
     $("s-save").textContent = "追加する"; $("s-cancel").hidden = true; $("s-load-msg").textContent = ""; $("add-title").textContent = "場所を詳しく入れる・編集する"; renderSpotAreaChips();
   }
-  function startEdit(id){
+  function startEdit(id, inSheet){
     const s = state.spots.find(x => x.id === id); if (!s) return;
     editing = id; Object.entries(FIELDS).forEach(([k, fid]) => $(fid).value = s[k] != null ? s[k] : "");
     $("s-latlng").value = hasPos(s) ? `${s.lat}, ${s.lng}` : ""; editOrigLL = $("s-latlng").value;
     prio = s.prio; [...$("s-prio").children].forEach(c => c.setAttribute("aria-pressed", Number(c.dataset.p) === prio ? "true" : "false"));
     renderSpotAreaChips(); $("s-save").textContent = "保存する"; $("s-cancel").hidden = false; $("add-title").textContent = `「${s.name}」を編集`;
+    if (inSheet) { // カードから：いまの画面のまま、窓で編集する
+      openSheet(`「${s.name}」の詳細を編集`, $("spot-form"));
+      const del = el("button", "link", "この場所を、登録リストから削除する"); del.type = "button"; del.style.color = "var(--star)"; del.style.marginTop = "10px"; del.dataset.del = id;
+      del.onclick = () => { if (!confirm(`「${s.name}」を削除しますか？`)) return; deleteSpot(id); closeSheet(); };
+      $("ms-box").append(del); return;
+    }
     $("add-box").open = true; if (curView() === "all") $("add-box").scrollIntoView({ behavior: "smooth", block: "start" }); else go("edit");
   }
+  function deleteSpot(id){
+    if (whereIs(id)) { unassign(id); cloudMarkPlan(); } // 枠や食事から外すのが先（場所を消したあとでは、見つからない）
+    state.spots = state.spots.filter(x => x.id !== id);
+    save(); cloudMark(id, "del"); renderSpots();
+  }
+  const editSpotCard = id => startEdit(id, true);
   $("s-area").addEventListener("input", renderSpotAreaChips);
-  $("s-cancel").onclick = () => { resetForm(); if (curView() === "edit") goBack("spots"); };
+  $("s-cancel").onclick = () => { resetForm(); if ($("ms-box").contains($("spot-form"))) closeSheet(); else if (curView() === "edit") goBack("spots"); };
   $("spot-form").onsubmit = e => {
     e.preventDefault();
     const v = {}; Object.entries(FIELDS).forEach(([k, fid]) => v[k] = $(fid).value.trim()); v.area = joinAreas(splitAreas(v.area)); // エリアは、「、」でつないだ形にそろえる
@@ -2453,7 +2473,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (ll) { target.lat = ll.lat; target.lng = ll.lng; }
       state.spots.push(target); cloudMark(id, "up"); toast(`「${v.name}」を追加しました`);
     }
-    save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots(); if (curView() === "edit") goBack("spots");
+    save(); resetForm(); $("s-msg").textContent = ""; $("s-load-msg").textContent = ""; renderSpots(); if ($("ms-box").contains($("spot-form"))) closeSheet(); else if (curView() === "edit") goBack("spots");
     if (!hasPos(target)) locate(target.id); // 住所から位置を調べる（裏で）
   };
 
