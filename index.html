@@ -225,6 +225,10 @@ details.card[open] > summary{margin-bottom:10px}
 .prio button[aria-pressed="true"]{background:var(--star);border-color:var(--star);color:var(--paper)}
 
 /* 下の固定バー */
+.dchip.fr{display:flex;align-items:center;gap:8px;border-style:dashed;background:transparent}
+.dchip.fr .frico{font-weight:700;color:var(--muted);padding:0 6px}
+.dchip.fr .nm{flex:1;min-width:0}
+.frb{align-self:flex-start;font-size:13px}
 .rentcard{display:flex;flex-direction:column;gap:2px;border:1.5px dashed var(--accent);border-radius:12px;padding:8px 12px;font-size:14px}
 .rentcard .rl{color:var(--ink)}
 .sub.cost,.cost{color:var(--accent);font-weight:700}
@@ -1664,6 +1668,37 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const slotsOf = k => { const sl = (state.plan.days[k] || {}).slots; return sl && typeof sl === "object" ? sl : {}; };
   const slotIds = (k, sl) => (Array.isArray(slotsOf(k)[sl]) ? slotsOf(k)[sl] : []).filter(id => state.spots.some(x => x.id === id));
   const spotById = id => state.spots.find(x => x.id === id);
+  // 何もしない時間（遊休時間）：枠の配列の中に、場所のidのかわりに { f: 1, id, label, min } が入る（場所ではないので、登録リストには出ない）
+  const isFree = x => !!x && typeof x === "object" && x.f === 1;
+  const FREE_MINS = [15, 30, 45, 60, 90, 120, 180];
+  const freeMin = f => FREE_MINS.includes(Number(f.min)) ? Number(f.min) : (Number(f.min) > 0 && Number(f.min) <= 720 ? Math.round(Number(f.min)) : 60);
+  const freeLabel = f => (f.label && String(f.label).trim()) || "何もしない時間";
+  const fmtMin = m => m >= 60 ? (m % 60 ? `${Math.floor(m / 60)}時間${m % 60}分` : `${Math.floor(m / 60)}時間`) : `${m}分`;
+  // 枠の中身（場所のid＋何もしない時間）を、入れた順に
+  const slotRaw = (k, sl) => (Array.isArray(slotsOf(k)[sl]) ? slotsOf(k)[sl] : []).filter(x => isFree(x) ? true : state.spots.some(y => y.id === x));
+  function addFree(k, sl, label, min, index){
+    const day = state.plan.days[k] = state.plan.days[k] || {}; day.slots = day.slots || {};
+    const arr = Array.isArray(day.slots[sl]) ? day.slots[sl] : (day.slots[sl] = []);
+    arr.splice(index == null ? arr.length : Math.max(0, Math.min(index, arr.length)), 0, { f: 1, id: newId(), label: String(label || "").trim().slice(0, 40), min });
+    changePlan();
+  }
+  function freeForm(k, sl, f, done){
+    const form = el("div", "stack"); form.style.gap = "6px"; form.dataset.freeForm = k;
+    form.append(el("span", "note", "何も予定を入れない時間です（休けい・ホテルでゆっくり・ぶらぶら歩く・自由行動など）。"));
+    const lab = mkInput("fr-label", "ひとこと", 40); lab.placeholder = "ひとこと（例：ホテルで休けい、自由行動）。空でもOK"; lab.value = f ? (f.label || "") : "";
+    const sel = el("select"); sel.className = "fr-min"; sel.setAttribute("aria-label", "時間の長さ");
+    const opts = f && !FREE_MINS.includes(freeMin(f)) ? FREE_MINS.concat(freeMin(f)).sort((a, b) => a - b) : FREE_MINS;
+    opts.forEach(m => { const o = document.createElement("option"); o.value = m; o.textContent = fmtMin(m); sel.append(o); }); sel.value = String(f ? freeMin(f) : 60);
+    const ll = el("label", null, "ひとこと"); ll.append(lab); const sl2 = el("label", null, "時間の長さ"); sl2.append(sel);
+    const go = el("button", "btn small", f ? "保存する" : "この時間を入れる"); go.type = "button"; go.style.alignSelf = "flex-start";
+    go.onclick = () => {
+      if (f) { f.label = lab.value.trim().slice(0, 40); f.min = Number(sel.value); changePlan(); }
+      else addFree(k, sl, lab.value, Number(sel.value));
+      if (done) done(); else renderPlan();
+    };
+    form.append(ll, sl2, go);
+    return form;
+  }
   // その場所が入っている所：午前・午後・夜の枠、または食事の場所（朝食・昼食・夕食）
   function whereIs(id){
     const list = dayList();
@@ -1704,7 +1739,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   const dayAt = (list, i) => { const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"); return { am, pm, same: hasBase(am) && hasBase(pm) && sameBase(am, pm) }; };
   // 場所の一覧：この日の予定に入っている場所を、区分ごとに「午前：A→B」のように短くまとめる
-  const slotLine = k => SLOTS.map(([sl]) => { const n = slotIds(k, sl).map(id => spotById(id).name); return n.length ? `${SLOT_SHORT[sl]}：${n.join("→")}` : ""; }).filter(Boolean).join("／");
+  const slotLine = k => SLOTS.map(([sl]) => { const n = slotRaw(k, sl).map(x => isFree(x) ? `（${freeLabel(x)} ${fmtMin(freeMin(x))}）` : spotById(x).name); return n.length ? `${SLOT_SHORT[sl]}：${n.join("→")}` : ""; }).filter(Boolean).join("／");
   let dragging = null, boardDirty = false;
   let boardOnly = false, boardDay = "";
   // 食事は、拠点に次ぐ「基準点」。枠の起点＝その枠の前の食事（位置が分かるもの）、なければ拠点
@@ -1773,7 +1808,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         add({ type: "meal", key: it.key, label: it.label, m: it.m, start, end, fixed: it.fixed }, w);
         cursor = end; if (pt) pos = pt;
         const sl = { b: "am", l: "pm", d: "ev" }[it.key], items = [];
-        slotIds(k, sl).forEach(id => {
+        slotRaw(k, sl).forEach(id => {
+          if (isFree(id)) { const a = cursor, e = a + freeMin(id); items.push({ free: true, f: id, start: a, end: e }); cursor = e; return; } // 何もしない時間：場所は動かない
           const s = spotById(id), tr2 = pos && hasPos(s) ? travel(pos, s).min : UNK_LEG, a = cursor + tr2, e = a + stayMin(s);
           items.push({ id, s, start: a, end: e }); cursor = e; pos = hasPos(s) ? s : null; // 位置が分からない場所のあとは、つぎの移動も仮の時間にする
         });
@@ -1812,6 +1848,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     return d;
   }
   const sgOpen = new Set(); // 「近くの場所から選ぶ」を開いている枠
+  const SG_STEPS = [1, 2, 5, 10, Infinity]; const sgRad = new Map(); // 近くの候補：どこまでの距離（km）を見ているか（枠ごと。はじめは1km）
   const spotMapUrl = s => s.map && /^https?:\/\//i.test(s.map) ? s.map : mapsQ(`${s.name} ${s.area || ""}`.trim());
   const mealMapUrl = (m, k) => mealKind(m) === "base" ? (() => { const b = mealBaseOf(k, m); return b && (b.name || b.address) ? mapsQ([b.name, b.address].filter(Boolean).join(" ")) : ""; })() : m.map && /^https?:\/\//i.test(m.map) ? m.map : (m.name || m.address) ? mapsQ([m.name, m.address].filter(Boolean).join(" ")) : "";
   function mapLink(href, text){ const a = el("a", "mlink", text || "地図"); a.href = href; a.target = "_blank"; a.rel = "noopener"; return a; }
@@ -1958,16 +1995,27 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const slotZone = ev => {
         const sl = ev.sl, label = SLOTS.find(x => x[0] === sl)[1], z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dtext} ${label}`);
         const zt = el("div", "zt", SLOT_SHORT[sl]); zt.append(el("small", null, label.replace(/^[^（]*/, "").replace(/[（）]/g, ""))); z.append(zt);
-        const ids = slotIds(k, sl), anc = slotAnchor(k, da, sl), nxt = slotNext(k, da, sl);
+        const anc = slotAnchor(k, da, sl), nxt = slotNext(k, da, sl);
         if (anc) z.append(el("div", "anc", `起点：${anc.label}`));
-        if (!ids.length) z.append(el("div", "hint", "ここにカードをドロップ"));
+        if (!ev.items.length) z.append(el("div", "hint", "ここにカードをドロップ"));
+        let prevSpot = null; // 何もしない時間をはさんでも、移動は「前の場所→つぎの場所」でつなぐ
         ev.items.forEach((it, idx) => {
+          if (it.free) {
+            const c = el("div", "dchip fr"); c.dataset.free = it.f.id;
+            const t = el("span", "nm", `${freeLabel(it.f)}`); t.append(el("span", "sub tmr", `${fmtHM(it.start)}〜${fmtHM(it.end)}頃（${fmtMin(freeMin(it.f))}・何もしない）`));
+            const ed = el("button", "link cedit", "編集"); ed.type = "button"; ed.setAttribute("aria-label", `${freeLabel(it.f)}を編集`); ed.onclick = () => openSheet(`${dtext}　何もしない時間`, freeForm(k, sl, it.f, closeSheet));
+            const x = el("button", "link", "×"); x.type = "button"; x.setAttribute("aria-label", `${freeLabel(it.f)}を外す`);
+            x.onclick = () => { const arr = state.plan.days[k].slots[sl]; const i = arr.indexOf(it.f); if (i >= 0) arr.splice(i, 1); pruneDay(k); changePlan(); };
+            c.append(el("span", "frico", "…"), t, ed, x); z.append(c); return;
+          }
           const s = it.s;
-          const lg = idx === 0 ? (anc ? legAny(anc.p, s, "↓") : null) : legAny(ev.items[idx - 1].s, s, "↓");
+          const lg = prevSpot ? legAny(prevSpot, s, "↓") : (anc ? legAny(anc.p, s, "↓") : null);
           if (lg) z.append(lg);
           z.append(chipFor(s, { num: true, time: `${fmtHM(it.start)}〜${fmtHM(it.end)}頃`, sub: distText(s, da) }));
+          prevSpot = s;
         });
-        if (ids.length && nxt) { const lg = legAny(ev.items[ev.items.length - 1].s, nxt.p, `↓ ${nxt.label}へ`); if (lg) z.append(lg); }
+        if (prevSpot && nxt) { const lg = legAny(prevSpot, nxt.p, `↓ ${nxt.label}へ`); if (lg) z.append(lg); }
+        { const fb = el("button", "link frb", "＋ 何もしない時間を入れる"); fb.type = "button"; fb.dataset.date = k; fb.dataset.slot = sl; fb.onclick = () => openSheet(`${dtext}　何もしない時間（${SLOT_SHORT[sl]}）`, freeForm(k, sl, null, closeSheet)); z.append(fb); }
         // 起点（食事・拠点）から近い順に、まだ入れていない場所を出す
         const key = k + "|" + sl, sgb = el("button", "link sgb", sgOpen.has(key) ? "近くの場所の候補をとじる" : `${anc ? anc.label.replace(/（.*/, "") : "拠点"}から近い場所を探す`); sgb.type = "button";
         sgb.onclick = () => { if (sgOpen.has(key)) sgOpen.delete(key); else sgOpen.add(key); renderBoard(); };
@@ -1976,14 +2024,28 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           const box = el("div", "sg");
           const free = sorted().filter(x => !x.done && !whereIs(x.id));
           if (!anc) box.append(el("p", "note", "起点の位置が分かりません。拠点や食事の住所を入れると、近い順に出せます。"));
-          const ranked = free.map(x => ({ x, t: anc && hasPos(x) ? travel(anc.p, x) : null })).sort((a, b) => (a.t ? a.t.d : 1e9) - (b.t ? b.t.d : 1e9) || b.x.prio - a.x.prio).slice(0, 6);
-          if (!ranked.length) box.append(el("p", "note", "入れていない場所はありません。"));
+          // 距離を絞って、段階的に広げる（1km → 2km → 5km → 10km → それ以上）
+          const ri = Math.min(sgRad.get(key) || 0, SG_STEPS.length - 1), R = SG_STEPS[ri];
+          const all = free.map(x => ({ x, t: anc && hasPos(x) ? travel(anc.p, x) : null })).sort((a, b) => (a.t ? a.t.d : 1e9) - (b.t ? b.t.d : 1e9) || b.x.prio - a.x.prio);
+          const near = anc ? all.filter(o => o.t && o.t.d <= R) : all.slice(0, 6);
+          const farN = anc ? all.filter(o => o.t && o.t.d > R).length : 0, unk = anc ? all.filter(o => !o.t) : [];
+          if (anc) {
+            const row = el("div", "row sgrad"); row.style.cssText = "gap:6px;flex-wrap:wrap";
+            SG_STEPS.forEach((v, i) => { const b = el("button", "pillbtn", v === Infinity ? "それ以上" : `${v}km`); b.type = "button"; b.setAttribute("aria-pressed", i === ri ? "true" : "false"); b.dataset.km = v === Infinity ? "all" : v; b.onclick = () => { sgRad.set(key, i); renderBoard(); }; row.append(b); });
+            box.append(row, el("p", "note", R === Infinity ? `ぜんぶ（${near.length}か所）を、近い順に出しています。` : `直線${R}km以内：${near.length}か所（近い順）`));
+          }
+          const shown = near.slice(0, 12), ranked = shown.concat(anc && ri === SG_STEPS.length - 1 || !anc ? unk : []);
+          if (!near.length && anc) box.append(el("p", "note", free.length ? `${R}km以内に、入れていない場所はありません。` : "入れていない場所はありません。"));
+          else if (!free.length) box.append(el("p", "note", "入れていない場所はありません。"));
+          if (anc && unk.length && ri < SG_STEPS.length - 1) box.append(el("p", "note", `位置がまだ分からない場所が ${unk.length} か所あります（「それ以上」で出ます）。`));
+          if (near.length > shown.length) box.append(el("p", "note", `ほかに ${near.length - shown.length} か所あります（上の距離をしぼると見やすくなります）。`));
           ranked.forEach(({ x, t }) => {
             const r = el("div", "sgr"), tx = el("span", "nm", `${"★".repeat(x.prio)} ${x.name}`);
             tx.append(el("span", "sub", t ? travelText(t) : hasPos(x) ? "" : "位置がまだ分かりません"));
             const add = el("button", "btn small", "入れる"); add.type = "button"; add.onclick = () => placeSpot(x.id, k, sl, 99);
             r.append(tx, add); box.append(r);
           });
+          if (anc && ri < SG_STEPS.length - 1 && farN) { const more = el("button", "btn ghost small sgmore", `もっと遠くも見る（${SG_STEPS[ri + 1] === Infinity ? "それ以上" : SG_STEPS[ri + 1] + "km"}まで。あと${farN}か所）`); more.type = "button"; more.onclick = () => { sgRad.set(key, ri + 1); renderBoard(); }; box.append(more); }
           z.append(box);
         }
         return z;
@@ -2208,6 +2270,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
           timed(`meal-${k}-${e.key}`, k, e.start, e.end, { title: `${e.label}：${mealShort(m, k, true)}`, loc: b ? [b.name, b.address].filter(Boolean).join(" ") : mealKind(m) === "wind" ? "" : (m.address || m.name || ""), url: mealMapUrl(m, k), desc: e.fixed ? "" : approx });
         }
         else if (e.type === "slot") e.items.forEach(it => {
+          if (it.free) { timed(`free-${k}-${it.f.id}`, k, it.start, it.end, { title: `何もしない時間${it.f.label ? "：" + it.f.label : ""}`, desc: "予定を入れていない時間です。時間は目安です。" }); return; }
           const s = it.s; timed(`spot-${k}-${s.id}`, k, it.start, it.end, { title: s.name, loc: s.address || s.name, url: spotMapUrl(s), desc: [`${"★".repeat(s.prio)} ${s.kind || ""}`.trim(), s.hours ? "営業 " + s.hours : "", s.closed ? "定休 " + s.closed : "", s.memo || "", approx].filter(Boolean).join("\n") });
         });
       });
