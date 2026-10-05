@@ -225,6 +225,8 @@ details.card[open] > summary{margin-bottom:10px}
 .prio button[aria-pressed="true"]{background:var(--star);border-color:var(--star);color:var(--paper)}
 
 /* 下の固定バー */
+.fab{position:fixed;z-index:35;right:max(16px,calc((100vw - 640px)/2 + 16px));bottom:calc(env(safe-area-inset-bottom,0px) + 16px + var(--fab-off,0px));height:52px;padding:0 18px 0 14px;border-radius:26px;border:0;background:var(--accent);color:var(--bg);display:flex;align-items:center;gap:6px;font:inherit;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.fab b{font-size:24px;line-height:1;font-weight:700}
 .dock{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));z-index:5}
 .dock .in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
 .quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
@@ -590,6 +592,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   </section>
 </div>
 
+<button class="fab" id="fab-add" type="button" aria-label="場所を追加する"><b>＋</b><span>場所を追加</span></button>
 <div class="dock only-now vmain">
   <div class="in">
     <div class="quick" id="quick">
@@ -2589,27 +2592,31 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (!hasPos(t)) locate(id); // 住所から位置を調べる（裏で）
     return t;
   }
-  async function quickAdd(){
-    const raw = $("qa-url").value.trim(), msg = $("qa-msg"); if (!raw) { msg.textContent = "リンクか名前を入れてください"; return; }
-    $("qa-add").disabled = true; msg.textContent = "読みこみ中…";
+  // ui＝{ input, msg, addBtn, nameBox, name }：「1 集める」の欄と、右下の「＋ 場所を追加」の窓で、同じ処理を使う
+  const QA_MAIN = () => ({ input: $("qa-url"), msg: $("qa-msg"), addBtn: $("qa-add"), nameBox: $("qa-name-box"), name: $("qa-name"), main: true });
+  let qaUi = null; // いま名前を聞いている欄
+  async function quickAdd(ui){
+    ui = ui && ui.input ? ui : QA_MAIN(); qaUi = ui;
+    const raw = ui.input.value.trim(), msg = ui.msg; if (!raw) { msg.textContent = "リンクか名前を入れてください"; return; }
+    ui.addBtn.disabled = true; msg.textContent = "読みこみ中…";
     const u = (raw.match(/https?:\/\/\S+/) || [""])[0];
     let info = null, map = "";
     if (u) {
       info = await mapInfoFromUrl(raw); map = u;
       if (info) map = cleanMapUrl(u);
     } else info = { name: raw };
-    $("qa-add").disabled = false;
-    if (!info || !info.name) { qaPending = Object.assign({}, info || {}, { map }); $("qa-name-box").hidden = false; $("qa-name").focus(); msg.textContent = u ? (info ? "リンクは読めましたが、名前がありません。" : "このリンクは読めませんでした。名前を入れると、リンクつきで追加します。") : ""; return; }
+    ui.addBtn.disabled = false;
+    if (!info || !info.name) { qaPending = Object.assign({}, info || {}, { map }); ui.nameBox.hidden = false; ui.name.focus(); msg.textContent = u ? (info ? "リンクは読めましたが、名前がありません。" : "このリンクは読めませんでした。名前を入れると、リンクつきで追加します。") : ""; return; }
     // すでに同じ場所（同じリンク、または同じ名前と住所）があれば、ふやさない
     const dup = state.spots.find(x => (map && x.map && cleanMapUrl(x.map) === map) || (x.name === info.name && (x.address || "") === (info.address || "")));
-    $("qa-url").value = ""; $("qa-name-box").hidden = true; qaPending = null;
+    ui.input.value = ""; ui.nameBox.hidden = true; qaPending = null;
     if (dup) { msg.textContent = `「${dup.name}」は、もう入っています。`; toast(`「${dup.name}」は、もう入っています`); return; }
     const t = addSpotQuick(Object.assign({}, info, { map }));
-    msg.textContent = `「${t.name}」を追加しました。下の登録リストから、日ごとの枠へ入れられます。`;
+    msg.textContent = `「${t.name}」を追加しました。` + (ui.main ? "下の登録リストから、日ごとの枠へ入れられます。" : "続けて入れられます。");
     toast(`「${t.name}」を追加しました`);
-    $("qa-url").focus();
+    ui.input.focus();
   }
-  $("qa-add").onclick = quickAdd;
+  $("qa-add").onclick = () => quickAdd();
   // コピーしたリンクを、貼らずに追加（iPhone では「ペースト」の確認が1回出る）
   $("qa-clip").onclick = async () => {
     const msg = $("qa-msg");
@@ -2625,10 +2632,54 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("qa-url").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); quickAdd(); } });
   $("qa-url").addEventListener("paste", () => setTimeout(() => { if (/https?:\/\//.test($("qa-url").value)) quickAdd(); }, 0));
   $("qa-name-ok").onclick = () => {
-    const nm = $("qa-name").value.trim(); if (!nm) { $("qa-msg").textContent = "名前を入れてください"; return; }
-    const t = addSpotQuick(Object.assign({}, qaPending || {}, { name: nm }));
-    $("qa-name").value = ""; $("qa-url").value = ""; $("qa-name-box").hidden = true; qaPending = null; $("qa-msg").textContent = `「${t.name}」を追加しました。`;
+    nameOk(QA_MAIN());
   };
+  function nameOk(ui){
+    const nm = ui.name.value.trim(); if (!nm) { ui.msg.textContent = "名前を入れてください"; return; }
+    const t = addSpotQuick(Object.assign({}, qaPending || {}, { name: nm }));
+    ui.name.value = ""; ui.input.value = ""; ui.nameBox.hidden = true; qaPending = null; ui.msg.textContent = `「${t.name}」を追加しました。`;
+  }
+  // 右下の「＋ 場所を追加」：どの画面でも、窓で場所をすぐ登録できる（リンクか名前を貼る。続けて入れられる）
+  function fabForm(){
+    const w = el("div", "stack"); w.style.gap = "8px";
+    w.append(el("p", "note", "Googleマップのリンクか、場所の名前を貼ってください。名前や住所は自動で入ります。"));
+    const row = el("div", "row"); row.style.flexWrap = "nowrap";
+    const input = el("input"); input.placeholder = "リンクか名前を貼る"; input.setAttribute("aria-label", "Googleマップのリンクか場所の名前"); input.setAttribute("inputmode", "url"); input.style.cssText = "flex:1;min-width:0";
+    const add = el("button", "btn", "追加"); add.type = "button"; row.append(input, add);
+    const nameBox = el("div", "stack"); nameBox.hidden = true; nameBox.style.gap = "6px";
+    const name = el("input"); name.maxLength = 60; name.placeholder = "例：伏見稲荷大社";
+    const nl = el("label", null, "名前が読めませんでした。名前を入れてください"); nl.append(name);
+    const ok = el("button", "btn small", "この名前で追加"); ok.type = "button"; ok.style.alignSelf = "flex-start"; nameBox.append(nl, ok);
+    const clip = el("button", "btn ghost small", "コピーしたリンクを、貼らずに追加"); clip.type = "button"; clip.style.alignSelf = "flex-start";
+    const msg = el("span", "msg"); msg.style.color = "var(--accent)";
+    const more = el("button", "link", "くわしく入れる（営業時間・メモなど）"); more.type = "button"; more.style.alignSelf = "flex-start";
+    const ui = { input, msg, addBtn: add, nameBox, name };
+    add.onclick = () => quickAdd(ui);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); quickAdd(ui); } });
+    input.addEventListener("paste", () => setTimeout(() => { if (/https?:\/\//.test(input.value)) quickAdd(ui); }, 0));
+    ok.onclick = () => nameOk(ui);
+    clip.onclick = async () => {
+      try {
+        const t = ((await navigator.clipboard.readText()) || "").trim();
+        if (!t) { msg.textContent = "コピーしたものがありません。Googleマップで「共有」→「コピー」を押してください。"; return; }
+        if (!/https?:\/\//.test(t) && t.length > 40) { msg.textContent = "Googleマップのリンクではないようです。"; return; }
+        input.value = t; quickAdd(ui);
+      } catch { msg.textContent = "コピーしたものを読めませんでした。入力欄に貼りつけてください。"; input.focus(); }
+    };
+    more.onclick = () => { closeSheet(); go("edit"); };
+    w.append(row, nameBox, clip, msg, more);
+    setTimeout(() => input.focus(), 50);
+    return w;
+  }
+  $("fab-add").onclick = () => openSheet("場所を追加", fabForm());
+  // 右下のボタンが、下に固定の部品（下のバー・登録リスト・一括操作バー）にかぶらないように、そのぶん上げる
+  function placeFab(){
+    const f = $("fab-add"); if (!f) return;
+    let off = 0;
+    ["#board-tray", "#bulk-bar", ".dock"].forEach(q => { const e = document.querySelector(q); if (!e || e.hidden) return; const cs = getComputedStyle(e); if (cs.display === "none") return; const r = e.getBoundingClientRect(); if (r.height && r.top < innerHeight && r.bottom > 0) off = Math.max(off, innerHeight - r.top); });
+    f.style.setProperty("--fab-off", off ? off + "px" : "0px");
+  }
+  addEventListener("scroll", placeFab, { passive: true }); addEventListener("resize", placeFab); setInterval(placeFab, 400);
   $("bulk-toggle").onclick = () => { bulkMode = !bulkMode; if (!bulkMode) bulkSel.clear(); renderSpotList(); };
   $("area-sort").onclick = () => { state.settings["spot-sort"] = state.settings["spot-sort"] === "area" ? "" : "area"; save(); renderSpotList(); };
   $("bulk-all").onclick = () => { sorted().filter(s => $("show-done").checked || !s.done).forEach(s => bulkSel.add(s.id)); renderSpotList(); };

@@ -91,6 +91,7 @@
   - 「コピーしたリンクを、貼らずに追加」（`#qa-clip`）：クリップボードを読んで（`navigator.clipboard.readText`。iPhone では「ペースト」の確認が1回出る）、そのまま `quickAdd`。リンクがなく40文字を超える文章は追加しない
   - `?add=（リンクや名前。URLエンコード）` で開くと、そのまま登録する（`quickAdd`。使ったあと `stripParams("add")` でアドレスから消す）。iPhone の「ショートカット」アプリで、共有シートから `https://…/?add=（エンコードしたテキスト）` を「URLを開く」にする使い方を、画面の「共有メニューから、もっと手間なく追加する方法」に書いた（実機の iPhone では未確認。Safari で開くので、ホーム画面アプリとはデータが別。ログインすれば同じリスト）
   - すでに同じ場所（同じGoogleマップのリンク、または同じ名前と住所）があるときは、ふやさず「もう入っています」と知らせる
+  - 右下の「＋ 場所を追加」ボタン（`#fab-add`。どの画面でも画面に固定。`position:fixed`、広い画面でも列の右はしにそろえる）：押すと窓（`openSheet`）に、リンクか名前を貼る欄（`fabForm`。処理は「集める」の欄と同じ `quickAdd(ui)`。続けて入れられる。名前が読めないときの欄・「コピーしたリンクを、貼らずに追加」・「くわしく入れる」で `edit` 画面へ）が開く。下に固定の部品（`.dock`・`#board-tray`・`#bulk-bar`）にかぶらないよう、`placeFab` がそのぶん上げる（`--fab-off`）
 - Googleマップのリンク読みこみ：「場所を追加」の URL 欄に貼ると、名前・住所・エリアを自動で入れる（空の欄だけ）
   - 長いURL（`google.com/maps?q=〒… 住所 名前` や `/maps/place/名前/`）はページの中だけで読み取る
   - 短縮リンク（`maps.app.goo.gl`）は Supabase Edge Function（ダッシュボード上の名前は `hyper-function`、コードは `supabase/functions/resolve-map/index.ts`）で長いURLに戻す。呼び先は `index.html` の `RESOLVER`（プロジェクト `cnnwxwiqauyawngkpapk`。空なら短縮リンクは読まない）
