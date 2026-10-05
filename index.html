@@ -379,7 +379,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <h2 id="h-spots">行きたい場所のリスト <span class="note" id="count"></span></h2>
       <label class="row" style="flex-direction:row;gap:6px;font-size:13px"><input type="checkbox" id="show-done" style="width:auto"> 行った所も表示</label>
       <div class="row" id="spots-tools" style="flex-basis:100%;gap:8px">
-        <button class="pillbtn" id="bulk-toggle" type="button">まとめて選ぶ</button>
+        <button class="pillbtn" id="bulk-toggle" type="button" hidden>まとめて選ぶ</button>
         <button class="pillbtn" id="area-sort" type="button" aria-pressed="false">エリア順にする</button>
       </div>
     </div>
@@ -468,6 +468,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       <input id="bulk-area" list="area-list" maxlength="80" placeholder="ほかのエリア名（「、」でいくつでも）" aria-label="まとめて入れるエリア名">
       <div class="row" style="gap:8px"><button class="btn small" type="button" id="bulk-apply">エリアを変える（おきかえ）</button><button class="btn ghost small" type="button" id="bulk-add">エリアを足す</button></div>
       <button class="link" type="button" id="bulk-clear" style="align-self:flex-start">選んだ場所のエリアを消す</button>
+      <div class="row" style="gap:8px"><button class="btn ghost small" type="button" id="bulk-done">行った所にする</button><button class="btn ghost small" type="button" id="bulk-undone">まだ行っていない所にもどす</button></div>
     </div>
     <datalist id="area-list"></datalist>
 
@@ -1203,8 +1204,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
 
   function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); }
   // まとめて選んで、エリアを変える
-  let bulkMode = false; const bulkSel = new Set();
-  function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; }
+  let bulkMode = true; const bulkSel = new Set();
+  function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; const bar = $("bulk-bar"); if (bar) { const was = bar.hidden; bar.hidden = n === 0; if (was && n > 0) renderBulkChips(); } }
   // まとめて入れるエリア（ボタンで選んだもの＋入力欄に書いたもの。複数OK）
   const bulkAreas = new Set();
   const bulkChosen = () => [...new Set([...bulkAreas, ...splitAreas($("bulk-area").value)])];
@@ -1222,6 +1223,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     save(); toast(mode === "clear" ? `${ids.length}か所のエリアを消しました` : mode === "add" ? `${ids.length}か所にエリア「${joinAreas(ch)}」を足しました` : `${ids.length}か所のエリアを「${joinAreas(ch)}」にしました`);
     bulkSel.clear(); bulkAreas.clear(); $("bulk-area").value = ""; renderSpots();
   }
+  // 選んだ場所を「行った／まだ」にまとめて変える（カードの四角は選ぶだけ。行ったの印はここから）
+  function applyBulkDone(done){
+    const ids = [...bulkSel].filter(id => state.spots.some(x => x.id === id));
+    if (!ids.length) { toast("まず、場所を選んでください"); return; }
+    state.spots.forEach(s => { if (ids.includes(s.id) && !!s.done !== done) { s.done = done; cloudMark(s.id, "up"); } });
+    save(); toast(done ? `${ids.length}か所を行った所にしました` : `${ids.length}か所をまだ行っていない所にもどしました`);
+    bulkSel.clear(); renderSpots();
+  }
   function renderSpotList(){
     const box = $("spots"); box.textContent = "";
     const showDone = $("show-done").checked;
@@ -1231,7 +1240,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const bySort = state.settings["spot-sort"] === "area";
     $("bulk-toggle").textContent = bulkMode ? "選ぶのをやめる" : "まとめて選ぶ"; $("bulk-toggle").setAttribute("aria-pressed", bulkMode ? "true" : "false");
     $("area-sort").textContent = bySort ? "ふつうの順にもどす" : "エリア順にする"; $("area-sort").setAttribute("aria-pressed", bySort ? "true" : "false");
-    $("bulk-bar").hidden = !bulkMode; updateBulk(); if (bulkMode) renderBulkChips();
+    updateBulk(); if (!$("bulk-bar").hidden) renderBulkChips();
     refreshAreaList();
     if (!state.spots.length) { box.append(el("div","empty","まだありません。下の「場所を追加」から、行きたい場所を入れておこう。")); return; }
     if (!list.length) { box.append(el("div","empty","ぜんぶ行きました！ 「近くのおすすめ」を聞いてみよう。")); return; }
@@ -2624,6 +2633,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("area-sort").onclick = () => { state.settings["spot-sort"] = state.settings["spot-sort"] === "area" ? "" : "area"; save(); renderSpotList(); };
   $("bulk-all").onclick = () => { sorted().filter(s => $("show-done").checked || !s.done).forEach(s => bulkSel.add(s.id)); renderSpotList(); };
   $("bulk-none").onclick = () => { bulkSel.clear(); renderSpotList(); };
+  $("bulk-done").onclick = () => applyBulkDone(true);
+  $("bulk-undone").onclick = () => applyBulkDone(false);
   $("bulk-apply").onclick = () => applyBulk("replace");
   $("bulk-add").onclick = () => applyBulk("add");
   $("bulk-clear").onclick = () => applyBulk("clear");
