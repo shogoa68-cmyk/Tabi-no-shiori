@@ -150,10 +150,25 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 #board-tray{position:sticky;bottom:calc(var(--dock-h,130px) + 6px);z-index:4;margin-top:14px;background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:8px 8px 10px;box-shadow:0 -6px 18px rgba(0,0,0,.12)}
 #board-tray.over{border-color:var(--accent);background:var(--accent-soft)}
 #board-tray .th{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px}
-#board-tray label{white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:4px;font-size:12px}
+#board-tray label{flex-direction:row;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:4px;font-size:12px}
 #board-tray .strip{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:none}
 #board-tray .strip::-webkit-scrollbar{display:none}
 #board-tray .dchip{flex:none;width:150px;touch-action:pan-x;align-items:stretch;font-size:13px}
+#board-tray .tctl{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end}
+#board-tray .th{flex-wrap:nowrap}
+#board-tray .th>b{font-family:var(--display);font-size:13px;color:var(--ink);white-space:nowrap}
+#board-tray .tview{display:inline-flex;border:1.5px solid var(--line);border-radius:99px;overflow:hidden}
+#board-tray .tview button{font:inherit;font-size:12px;font-weight:700;border:0;background:transparent;color:var(--muted);padding:3px 9px;cursor:pointer}
+#board-tray .tview button[aria-pressed=true]{background:var(--accent);color:#fff}
+#board-tray.compact .dchip{width:auto;min-width:104px;max-width:170px;padding:4px 6px 4px 4px;align-items:center}
+#board-tray.compact .dchip .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;line-height:1.35}
+#board-tray.compact .dchip .sub,#board-tray.compact .dchip .mlink{display:none}
+#board-tray.compact .dchip .tag{margin-top:0;font-size:10.5px;padding:0 6px}
+#board-tray.compact .dchip>.hd{width:26px;margin:-4px 0 -4px -2px}
+#board-tray.compact .dchip>.hd::before{width:10px;height:18px;background-size:5px 6px}
+#board-tray.compact{padding:6px 6px 8px}
+.node.over{outline:2.5px solid var(--accent);outline-offset:3px;border-radius:8px;background:var(--accent-soft)}
+.mealhint{font-size:12px}
 #board-tray .dchip.used{background:var(--bg)}
 #board-tray .dchip.used .nm{opacity:.55}
 #board-tray .dchip .tag{display:inline-block;margin-top:2px;padding:0 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700}
@@ -374,7 +389,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         <label>旅の開始日<input type="date" id="plan-start"></label>
         <label>旅の終了日<input type="date" id="plan-end"></label>
       </div>
-      <p class="note" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）へ動かして入れます。入れたカードも、点々をつかんで動かせます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
+      <p class="note" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）や、朝食・昼食・夕食の行へ動かして入れます（食事の行へ入れると、その場所が食事の場所になります）。入れたカードも、点々をつかんで動かせます。「コンパクト／くわしく」で、リストの見た目を切りかえられます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
       <div id="board"></div>
     </section>
     <details class="card" id="hub-card" data-v="hubs">
@@ -1424,17 +1439,38 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   // ---- 日ごとの予定（ドラッグで組む）：plan.days[日付].slots = { am: [場所id], pm: [...], ev: [...] }（午前・午後・夜。入れた順番を保つ） ----
   const SLOTS = [["am", "午前（朝食のあと〜昼食）"], ["pm", "午後（昼食のあと〜夕食）"], ["ev", "夜（夕食のあと）"]];
-  const SLOT_SHORT = { am: "午前", pm: "午後", ev: "夜" };
+  const SLOT_SHORT = { am: "午前", pm: "午後", ev: "夜", "meal-b": "朝食", "meal-l": "昼食", "meal-d": "夕食" };
   const slotsOf = k => { const sl = (state.plan.days[k] || {}).slots; return sl && typeof sl === "object" ? sl : {}; };
   const slotIds = (k, sl) => (Array.isArray(slotsOf(k)[sl]) ? slotsOf(k)[sl] : []).filter(id => state.spots.some(x => x.id === id));
   const spotById = id => state.spots.find(x => x.id === id);
-  function whereIs(id){ const list = dayList(); for (let i = 0; i < list.length; i++) for (const sl of ["am", "pm", "ev"]) if (slotIds(list[i], sl).includes(id)) return { k: list[i], i, sl }; return null; }
+  // その場所が入っている所：午前・午後・夜の枠、または食事の場所（朝食・昼食・夕食）
+  function whereIs(id){
+    const list = dayList();
+    for (let i = 0; i < list.length; i++) {
+      for (const sl of ["am", "pm", "ev"]) if (slotIds(list[i], sl).includes(id)) return { k: list[i], i, sl };
+      for (const key of ["b", "l", "d"]) { const m = mealsOf(list[i])[key]; if (m && m.spot === id && spotById(id)) return { k: list[i], i, sl: "meal-" + key }; }
+    }
+    return null;
+  }
   function unassign(id){
     Object.keys(state.plan.days).forEach(k => {
-      const day = state.plan.days[k], sl = day && day.slots; if (!sl) return;
-      Object.keys(sl).forEach(n => { sl[n] = (Array.isArray(sl[n]) ? sl[n] : []).filter(x => x !== id); if (!sl[n].length) delete sl[n]; });
+      const day = state.plan.days[k]; if (!day) return;
+      const sl = day.slots;
+      if (sl) Object.keys(sl).forEach(n => { sl[n] = (Array.isArray(sl[n]) ? sl[n] : []).filter(x => x !== id); if (!sl[n].length) delete sl[n]; });
+      if (day.meals) { Object.keys(day.meals).forEach(key => { if (day.meals[key] && day.meals[key].spot === id) delete day.meals[key]; }); if (!Object.keys(day.meals).length) delete day.meals; }
       pruneDay(k);
     });
+  }
+  // 登録した場所を、食事の場所にする（登録リストから食事の行へドラッグ）。時刻は、いまの時刻を引きつぐ
+  function setMealSpot(id, k, key){
+    const s = spotById(id); if (!s) return;
+    unassign(id);
+    const day = state.plan.days[k] = state.plan.days[k] || {}; day.meals = day.meals || {};
+    const old = day.meals[key] || {}, m = { name: s.name, address: s.address || "", time: old.time || "", spot: s.id };
+    if (hasPos(s)) { m.lat = s.lat; m.lng = s.lng; }
+    if (s.map && /^https?:\/\//i.test(s.map)) m.map = s.map;
+    day.meals[key] = m; changePlan();
+    if (!hasPos(m) && m.address) locateMeal(k, key);
   }
   function placeSpot(id, k, sl, index){
     unassign(id);
@@ -1624,11 +1660,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       };
       const mealNode = ev => {
         const m = ev.m, key = ev.key, label = ev.label, n = el("div", "node");
+        n.dataset.drop = "meal"; n.dataset.date = k; n.dataset.mealkey = key; // 登録リストのカードを落とすと、その場所が食事の場所になる
         n.append(tmEl(ev.start, ev.fixed, !ev.fixed), el("b", null, label), document.createTextNode(hasMeal(m) ? mealShort(m, k, true) : "おまかせ　"));
         const bt = el("button", hasMeal(m) ? "link mealbtn" : "pillbtn mealbtn", hasMeal(m) ? "変更" : "＋ 場所を決める"); bt.type = "button"; bt.dataset.meal = key; bt.dataset.date = k; bt.style.marginLeft = "8px";
         bt.setAttribute("aria-label", `${dtext} ${label}の場所を${hasMeal(m) ? "変更" : "決める"}`);
         bt.onclick = () => openMealSheet(k, key, label, dtext); n.append(bt);
         if (m && mealKind(m) !== "wind" && mealMapUrl(m, k)) n.append(mapLink(mealMapUrl(m, k), "Googleマップ"));
+        if (!hasMeal(m)) n.append(el("span", "note mealhint", "　またはカードをここへ"));
         warnEls(ev).forEach(x => n.append(x)); return n;
       };
       const slotZone = ev => {
@@ -1669,9 +1707,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     });
     // 登録リスト（画面の下に固定。横にスクロール）
     const tray = el("div"); tray.id = "board-tray"; tray.dataset.drop = "tray";
-    const th = el("div", "th"); th.append(el("span", null, "登録リスト（左の点々をつかんで上へ。戻すと外れる）"));
+    const compact = state.settings["tray-view"] !== "detail"; tray.classList.toggle("compact", compact);
+    const th = el("div", "th"); th.append(el("b", null, "登録リスト"));
     const lb = el("label"), cb = el("input"); cb.type = "checkbox"; cb.checked = boardOnly; cb.id = "board-unused"; cb.onchange = () => { boardOnly = cb.checked; renderBoard(); };
-    lb.append(cb, document.createTextNode("未配置のみ")); th.append(lb);
+    lb.append(cb, document.createTextNode("未配置のみ"));
+    const tv = el("span", "tview"); tv.setAttribute("role", "group"); tv.setAttribute("aria-label", "登録リストの表示");
+    [["compact", "コンパクト"], ["detail", "くわしく"]].forEach(([v, t]) => { const b = el("button", null, t); b.type = "button"; b.dataset.tv = v; b.setAttribute("aria-pressed", (compact ? "compact" : "detail") === v ? "true" : "false"); b.onclick = () => { state.settings["tray-view"] = v; save(); renderBoard(); }; tv.append(b); });
+    const ctl = el("span", "tctl"); ctl.append(tv, lb); th.append(ctl);
     const strip = el("div", "strip");
     const shown = open.filter(s => !boardOnly || !whereIs(s.id));
     if (!shown.length) strip.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
@@ -1698,7 +1740,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       clear(); st.zone = null;
       const z = document.elementFromPoint(st.x, st.y); let dz = z && z.closest && z.closest("#board [data-drop]");
       if (!dz) { // 枠のすきまに落としそうなときは、近い枠（24px以内）に吸いよせる
-        let best = 24; document.querySelectorAll("#board .dayv:not([hidden]) .dz").forEach(n => { const r = n.getBoundingClientRect(); const d = st.y < r.top ? r.top - st.y : st.y > r.bottom ? st.y - r.bottom : 0; if (st.x >= r.left - 24 && st.x <= r.right + 24 && d < best) { best = d; dz = n; } });
+        let best = 24; document.querySelectorAll("#board .dayv:not([hidden]) .dz, #board .dayv:not([hidden]) .node[data-drop=meal]").forEach(n => { const r = n.getBoundingClientRect(); const d = st.y < r.top ? r.top - st.y : st.y > r.bottom ? st.y - r.bottom : 0; if (st.x >= r.left - 24 && st.x <= r.right + 24 && d < best) { best = d; dz = n; } });
       }
       if (!dz) { st.tab = null; return; }
       dz.classList.add("over");
@@ -1707,6 +1749,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       st.tab = null; st.zone = dz;
       const chips = [...dz.querySelectorAll(":scope > .dchip, :scope > .strip > .dchip")].filter(c => c !== st.chip);
       let idx = chips.length;
+      if (dz.dataset.drop === "meal") { st.idx = 0; return; }
       if (dz.dataset.drop === "slot") {
         for (let n = 0; n < chips.length; n++) { const r = chips[n].getBoundingClientRect(); if (st.y < r.top + r.height / 2) { idx = n; break; } }
         if (idx < chips.length) chips[idx].classList.add("ins"); else dz.classList.add("endins");
@@ -1736,6 +1779,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const zone = ev.type === "pointercancel" ? null : st.zone, idx = st.idx;
       st.ghost.remove(); st.chip.classList.remove("lifting"); dragging = null;
       if (zone && zone.dataset.drop === "tray") { unassign(st.id); changePlan(); }
+      else if (zone && zone.dataset.drop === "meal") setMealSpot(st.id, zone.dataset.date, zone.dataset.mealkey);
       else if (zone) placeSpot(st.id, zone.dataset.date, zone.dataset.slot, idx);
       else if (boardDirty) renderBoard();
     };
@@ -1815,6 +1859,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         const old = day.meals[key] || {}; // お店が同じなら位置を引きつぐ。Googleマップのリンクに位置があれば使う
         if (kd !== "wind" && kd !== "base" && mealKind(old) === kd && old.name === m.name && old.address === m.address && hasPos(old)) { m.lat = old.lat; m.lng = old.lng; }
         if (kd !== "wind" && kd !== "base" && coords && hasPos(coords)) { m.lat = coords.lat; m.lng = coords.lng; }
+        if (kd === "shop" && old.spot && old.name === m.name && old.address === m.address) m.spot = old.spot; // 名前や住所を書きかえたら、登録した場所とのつながりは切る
         if (kd !== "wind" && kd !== "base") { if (mapUrl) m.map = mapUrl; else if (old.map && mealKind(old) === kd && old.name === m.name && old.address === m.address) m.map = old.map; } // 貼ったGoogleマップのリンクを覚える
         if (kd !== "wind" && kd !== "base" && !hasMeal(m)) delete day.meals[key]; else day.meals[key] = m;
         if (!Object.keys(day.meals).length) delete day.meals;
