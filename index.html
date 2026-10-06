@@ -1656,6 +1656,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     return box;
   }
   // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
+  // チケット情報のリンク（`url`）：予約サイト・Eチケット・予約確認のページなど。http(s) だけ。「https://…」を含む文なら、そのURLを取り出す
+  const cleanTicketUrl = t => { const u = ((String(t || "").match(/https?:\/\/[^\s<>"']+/i) || [""])[0]).slice(0, 2000); try { return /^https?:$/.test(new URL(u).protocol) ? u : ""; } catch { return ""; } };
   // 外せない移動の出発地・到着地の位置（`fromLat/fromLng`・`toLat/toLng`。どちらか片方だけでもよい）
   const moveEnd = (m, w) => { const o = { name: m[w] || "", lat: m[w + "Lat"], lng: m[w + "Lng"] }; return hasPos(o) ? o : null; };
   async function locateMove(k, id){ // 名前から位置を調べて入れる（入っていない側だけ。調べている間に書きかえられたら使わない）
@@ -1689,6 +1691,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     const dep = mkInput("mv-dep", "出発時刻", 5); dep.type = "time"; const arr = mkInput("mv-arr", "到着時刻", 5); arr.type = "time";
     const dl = el("label", null, "出発時刻"); dl.append(dep); const al = el("label", null, "到着時刻（わかれば）"); al.append(arr);
     const memo = mkInput("mv-memo", "メモ", 60); memo.placeholder = "メモ（座席・予約番号など。あれば）";
+    const tkt = mkInput("mv-url", "チケット情報のリンク", 2000); tkt.type = "url"; tkt.placeholder = "チケット情報のリンク（予約サイト・Eチケットなど。あれば）"; tkt.value = mv && mv.url ? mv.url : "";
+    const tl = el("label", null, "チケット情報のリンク"); tl.append(tkt);
     let mvCost = mv ? costOf(mv) : 0; const costL = costField("金額（円。わかれば）", mvCost, n => { mvCost = n || 0; });
     if (mv) { kind.value = mv.kind || kind.value; name.value = mv.name || ""; from.value = mv.from || ""; to.value = mv.to || ""; dep.value = mv.dep || ""; arr.value = mv.arr || ""; memo.value = mv.memo || ""; }
     let mid = null; const msg = el("span", "msg"); const add = el("button", "btn small", mv ? "保存する" : "この移動を追加"); add.type = "button"; add.style.alignSelf = "flex-start";
@@ -1696,13 +1700,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       if (!dep.value || !from.value.trim() || !to.value.trim()) { msg.textContent = "出発時刻・出発地・到着地を入れてください"; return; }
       const d = state.plan.days[k] = state.plan.days[k] || {}; d.moves = Array.isArray(d.moves) ? d.moves : [];
       const v = { kind: kind.value, name: name.value.trim(), from: from.value.trim(), to: to.value.trim(), dep: dep.value, arr: arr.value, memo: memo.value.trim() }; if (mvCost) v.cost = mvCost;
+      if (tkt.value.trim()) { const tu = cleanTicketUrl(tkt.value); if (!tu) { msg.textContent = "チケット情報のリンクは、https:// で始まるアドレスを入れてください"; return; } v.url = tu; }
       if (pos.from) { v.fromLat = pos.from.lat; v.fromLng = pos.from.lng; } if (pos.to) { v.toLat = pos.to.lat; v.toLng = pos.to.lng; }
-      if (mv) { const t = d.moves.find(x => x.id === mv.id); if (t) { ["cost", "fromLat", "fromLng", "toLat", "toLng"].forEach(x => delete t[x]); Object.assign(t, v); } else d.moves.push(Object.assign({ id: mv.id }, v)); }
+      if (mv) { const t = d.moves.find(x => x.id === mv.id); if (t) { ["cost", "url", "fromLat", "fromLng", "toLat", "toLng"].forEach(x => delete t[x]); Object.assign(t, v); } else d.moves.push(Object.assign({ id: mv.id }, v)); }
       else d.moves.push(Object.assign({ id: (mid = newId()) }, v));
       changePlan(); locateMove(k, mid || (mv && mv.id)); // 位置が入っていない側は、裏で調べる
       if (done) done(); else renderPlan();
     };
-    form.append(kind, name, from, posRow("from", from, "出発地"), to, posRow("to", to, "到着地"), dl, al, costL, memo, add);
+    form.append(kind, name, from, posRow("from", from, "出発地"), to, posRow("to", to, "到着地"), dl, al, costL, tl, memo, add);
     if (mv) { const del = el("button", "link", "この移動を削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
       del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== mv.id); pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
     form.append(msg);
@@ -1749,7 +1754,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dayLabel(k, dayList().indexOf(k))}　外せない移動`, moveForm(k, m, closeSheet));
       const del = el("button", "link", "削除"); del.type = "button";
       del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== m.id); pruneDay(k); changePlan(); renderPlan(); };
-      const ops = el("span"); ops.style.display = "flex"; ops.style.gap = "10px"; ops.append(ed, del); r.append(ops); wrap.append(r);
+      const ops = el("span"); ops.style.display = "flex"; ops.style.gap = "10px"; if (cleanTicketUrl(m.url)) ops.append(mapLink(cleanTicketUrl(m.url), "チケット情報")); ops.append(ed, del); r.append(ops); wrap.append(r);
     });
     wrap.append(moveForm(k, null, null));
     return wrap;
@@ -2072,6 +2077,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         t.append(el("span", "tm", fmtHM(ev.start)));
         const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${kindLabel(m.kind)}${m.name ? "　" + m.name : ""}${costOf(m) ? "　" + yenIf(m) : ""}`)); t.append(w);
         const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dtext}　外せない移動`, moveForm(k, m, closeSheet)); t.append(ed);
+        if (cleanTicketUrl(m.url)) { const tk = mapLink(cleanTicketUrl(m.url), "チケット情報"); tk.classList.add("tktlink"); t.append(tk); }
         n.append(t);
         { const miss = ["from", "to"].filter(w => !moveEnd(m, w)).map(w => w === "from" ? "出発地" : "到着地"); if (miss.length) n.append(el("span", "note mvpos", `${miss.join("・")}の位置がありません（編集で入れると、前後の移動時間を計算できます）`)); }
         warnEls(ev).forEach(x => n.append(x)); return n;
@@ -2361,7 +2367,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         if ((role === "ret" || role === "same") && hm(r.retTime) != null) timed(`rent-ret-${k}`, k, hm(r.retTime), hm(r.retTime) + 15, { title: `レンタカー返却：${nm}`, loc: r.retPlace || r.pickPlace || r.company, desc, alarm: 60 });
       });
       sch.evs.forEach(e => {
-        if (e.type === "move") { const m = e.m; timed(`mv-${m.id}`, k, e.start, e.end, { title: `${m.kind || "移動"}${m.name ? " " + m.name : ""}　${m.from || ""}→${m.to || ""}`, loc: m.from, desc: ["絶対に外せない移動", m.memo].filter(Boolean).join("\n"), alarm: m.kind === "飛行機" ? 120 : 60 }); }
+        if (e.type === "move") { const m = e.m; timed(`mv-${m.id}`, k, e.start, e.end, { title: `${m.kind || "移動"}${m.name ? " " + m.name : ""}　${m.from || ""}→${m.to || ""}`, loc: m.from, desc: ["絶対に外せない移動", m.memo].filter(Boolean).join("\n"), url: cleanTicketUrl(m.url), alarm: m.kind === "飛行機" ? 120 : 60 }); }
         else if (e.type === "meal" && hasMeal(e.m)) {
           const m = e.m, b = mealKind(m) === "base" ? mealBaseOf(k, m) : null;
           timed(`meal-${k}-${e.key}`, k, e.start, e.end, { title: `${e.label}：${mealShort(m, k, true)}`, loc: b ? [b.name, b.address].filter(Boolean).join(" ") : mealKind(m) === "wind" ? "" : (m.address || m.name || ""), url: mealMapUrl(m, k), desc: e.fixed ? "" : approx });
