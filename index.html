@@ -1656,27 +1656,53 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     return box;
   }
   // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
+  // 外せない移動の出発地・到着地の位置（`fromLat/fromLng`・`toLat/toLng`。どちらか片方だけでもよい）
+  const moveEnd = (m, w) => { const o = { name: m[w] || "", lat: m[w + "Lat"], lng: m[w + "Lng"] }; return hasPos(o) ? o : null; };
+  async function locateMove(k, id){ // 名前から位置を調べて入れる（入っていない側だけ。調べている間に書きかえられたら使わない）
+    const m0 = ((state.plan.days[k] || {}).moves || []).find(x => x.id === id); if (!m0) return;
+    for (const w of ["from", "to"]) {
+      if (!m0[w] || moveEnd(m0, w)) continue;
+      const r = await geocode({ name: m0[w] });
+      const m = ((state.plan.days[k] || {}).moves || []).find(x => x.id === id);
+      if (!m || m[w] !== m0[w] || moveEnd(m, w)) continue;
+      if (r) { m[w + "Lat"] = r.lat; m[w + "Lng"] = r.lng; changePlan(); }
+    }
+  }
   function moveForm(k, mv, done){
     const form = el("div", "stack"); form.style.gap = "6px"; form.dataset.moveForm = k;
     const kind = el("select"); kind.className = "mv-kind"; kind.setAttribute("aria-label", "移動の種類"); (mv && mv.kind && !MOVE_KINDS.includes(mv.kind) ? MOVE_KINDS.concat(mv.kind) : MOVE_KINDS).forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = kindLabel(t); kind.append(o); });
     const name = mkInput("mv-name", "列車や便の名前", 40); name.placeholder = "列車・便の名前（例：のぞみ12号、JAL123）";
     const from = mkInput("mv-from", "出発地", 40); from.placeholder = "出発地（例：東京駅、羽田空港）";
     const to = mkInput("mv-to", "到着地", 40); to.placeholder = "到着地（例：京都駅、伊丹空港）";
+    // 位置：名前から調べる（「位置を調べる」。保存のときにも、足りなければ自動で調べる）か、「緯度, 経度」を手で入れる。片方だけでもよい
+    const pos = { from: mv ? moveEnd(mv, "from") : null, to: mv ? moveEnd(mv, "to") : null };
+    const posRow = (w, input, label) => {
+      const row = el("div", "stack"); row.style.gap = "4px"; row.dataset.posrow = w;
+      const st = el("span", "note mv-pos"), man = mkInput("mv-" + w + "-ll", label + "の位置（手で入れるとき）", 40); man.placeholder = "緯度, 経度（例：35.68, 139.76）。空でもOK";
+      const show = () => { st.textContent = pos[w] ? `${label}の位置：あり（${pos[w].lat.toFixed(4)}, ${pos[w].lng.toFixed(4)}）` : `${label}の位置：まだありません`; };
+      const find = el("button", "link", `${label}の位置を調べる`); find.type = "button"; find.style.alignSelf = "flex-start";
+      find.onclick = async () => { const t = input.value.trim(); if (!t) { st.textContent = `${label}の名前を入れてください`; return; } st.textContent = "調べています…"; const g = await geocode({ name: t }); if (g) { pos[w] = g; show(); } else { pos[w] = null; st.textContent = `${label}の位置は見つかりませんでした。「緯度, 経度」を手で入れてもOKです`; } };
+      man.onchange = () => { const t = man.value.trim(); if (!t) return; const g = parseLatLng(t); if (g) { pos[w] = g; man.value = ""; show(); } else st.textContent = "「35.68, 139.76」のように、緯度と経度を入れてください"; };
+      input.addEventListener("input", () => { pos[w] = null; show(); }); // 名前を書きかえたら、前の位置は捨てる
+      show(); row.append(st, find, man); return row;
+    };
     const dep = mkInput("mv-dep", "出発時刻", 5); dep.type = "time"; const arr = mkInput("mv-arr", "到着時刻", 5); arr.type = "time";
     const dl = el("label", null, "出発時刻"); dl.append(dep); const al = el("label", null, "到着時刻（わかれば）"); al.append(arr);
     const memo = mkInput("mv-memo", "メモ", 60); memo.placeholder = "メモ（座席・予約番号など。あれば）";
     let mvCost = mv ? costOf(mv) : 0; const costL = costField("金額（円。わかれば）", mvCost, n => { mvCost = n || 0; });
     if (mv) { kind.value = mv.kind || kind.value; name.value = mv.name || ""; from.value = mv.from || ""; to.value = mv.to || ""; dep.value = mv.dep || ""; arr.value = mv.arr || ""; memo.value = mv.memo || ""; }
-    const msg = el("span", "msg"); const add = el("button", "btn small", mv ? "保存する" : "この移動を追加"); add.type = "button"; add.style.alignSelf = "flex-start";
+    let mid = null; const msg = el("span", "msg"); const add = el("button", "btn small", mv ? "保存する" : "この移動を追加"); add.type = "button"; add.style.alignSelf = "flex-start";
     add.onclick = () => {
       if (!dep.value || !from.value.trim() || !to.value.trim()) { msg.textContent = "出発時刻・出発地・到着地を入れてください"; return; }
       const d = state.plan.days[k] = state.plan.days[k] || {}; d.moves = Array.isArray(d.moves) ? d.moves : [];
       const v = { kind: kind.value, name: name.value.trim(), from: from.value.trim(), to: to.value.trim(), dep: dep.value, arr: arr.value, memo: memo.value.trim() }; if (mvCost) v.cost = mvCost;
-      if (mv) { const t = d.moves.find(x => x.id === mv.id); if (t) { delete t.cost; Object.assign(t, v); } else d.moves.push(Object.assign({ id: mv.id }, v)); }
-      else d.moves.push(Object.assign({ id: newId() }, v));
-      changePlan(); if (done) done(); else renderPlan();
+      if (pos.from) { v.fromLat = pos.from.lat; v.fromLng = pos.from.lng; } if (pos.to) { v.toLat = pos.to.lat; v.toLng = pos.to.lng; }
+      if (mv) { const t = d.moves.find(x => x.id === mv.id); if (t) { ["cost", "fromLat", "fromLng", "toLat", "toLng"].forEach(x => delete t[x]); Object.assign(t, v); } else d.moves.push(Object.assign({ id: mv.id }, v)); }
+      else d.moves.push(Object.assign({ id: (mid = newId()) }, v));
+      changePlan(); locateMove(k, mid || (mv && mv.id)); // 位置が入っていない側は、裏で調べる
+      if (done) done(); else renderPlan();
     };
-    form.append(kind, name, from, to, dl, al, costL, memo, add);
+    form.append(kind, name, from, posRow("from", from, "出発地"), to, posRow("to", to, "到着地"), dl, al, costL, memo, add);
     if (mv) { const del = el("button", "link", "この移動を削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
       del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== mv.id); pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
     form.append(msg);
@@ -1856,15 +1882,16 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     top.sort((a, b) => a.t - b.t || a.ord - b.ord);
     const evs = [], warns = [];
     const add = (ev, w) => { if (w) { ev.warns = [w]; warns.push(w); } evs.push(ev); };
-    let cursor = null, pos = hasPos(da.am) ? da.am : null;
+    let cursor = null, pos = hasPos(da.am) ? da.am : null, posLab = null; // posLab＝いまの位置が「移動の到着地」のとき、その名前
     evs.push({ type: "base", slot: "am", base: da.am });
     for (const it of top) {
       if (it.type === "move") {
         const dep = it.t; let arr = hm(it.m.arr); if (arr == null) arr = dep + 60; if (arr < dep) arr += 1440;
         const mg = it.m.kind === "飛行機" ? 60 : 30;
-        const w = cursor != null && cursor + mg > dep ? `「${it.m.from}→${it.m.to}」の出発（${fmtHM(dep)}）の${mg}分前までに乗り場へ着けない目安です（前の予定が${fmtHM(cursor)}ごろまでかかります）。` : "";
+        const fp = moveEnd(it.m, "from"), trF = fp && pos ? travel(pos, fp).min : 0; // 出発地の位置が分かれば、そこまでの移動時間も数える
+        const w = cursor != null && cursor + trF + mg > dep ? `「${it.m.from}→${it.m.to}」の出発（${fmtHM(dep)}）の${mg}分前までに乗り場へ着けない目安です（前の予定が${fmtHM(cursor)}ごろまでかかります${trF ? `。出発地まで約${trF}分` : ""}）。` : "";
         add({ type: "move", m: it.m, start: dep, end: arr }, w);
-        cursor = Math.max(cursor == null ? 0 : cursor, arr); pos = null; // 移動のあとの場所は、わからない
+        cursor = Math.max(cursor == null ? 0 : cursor, arr); pos = moveEnd(it.m, "to"); posLab = pos ? { p: pos, label: `到着地（${it.m.to}）` } : null; // 移動のあとの場所：到着地の位置が分かればそこ、なければ分からない
       } else {
         const pt = mealPoint(k, it.key), tr = pt ? (pos ? travel(pos, pt).min : (cursor != null ? UNK_LEG : 0)) : 0;
         let start = it.t, w = "";
@@ -1872,14 +1899,14 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         else start = Math.max(it.t, cursor == null ? 0 : cursor + tr);
         const end = start + MEAL_DUR[it.key];
         add({ type: "meal", key: it.key, label: it.label, m: it.m, start, end, fixed: it.fixed }, w);
-        cursor = end; if (pt) pos = pt;
-        const sl = { b: "am", l: "pm", d: "ev" }[it.key], items = [];
+        cursor = end; if (pt) { pos = pt; posLab = null; }
+        const sl = { b: "am", l: "pm", d: "ev" }[it.key], items = [], origin = pos && posLab && pos === posLab.p ? posLab : null; // 枠のはじめの位置が移動の到着地なら、それを起点にする
         slotRaw(k, sl).forEach(id => {
           if (isFree(id)) { const a = cursor, e = a + freeMin(id); items.push({ free: true, f: id, start: a, end: e }); cursor = e; return; } // 何もしない時間：場所は動かない
           const s = spotById(id), tr2 = pos && hasPos(s) ? travel(pos, s).min : UNK_LEG, a = cursor + tr2, e = a + stayMin(s);
           items.push({ id, s, start: a, end: e }); cursor = e; pos = hasPos(s) ? s : null; // 位置が分からない場所のあとは、つぎの移動も仮の時間にする
         });
-        evs.push({ type: "slot", sl, items });
+        evs.push({ type: "slot", sl, items, origin });
       }
     }
     let arrive = cursor; if (cursor != null && hasPos(da.pm)) arrive = cursor + (pos ? travel(pos, da.pm).min : UNK_LEG);
@@ -2045,7 +2072,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
         t.append(el("span", "tm", fmtHM(ev.start)));
         const w = el("span"); w.append(`${m.from || "?"} → ${m.to || "?"}${m.arr ? "（" + m.arr + "着）" : ""}`); w.append(el("span", "kd", `絶対に外せない移動　${kindLabel(m.kind)}${m.name ? "　" + m.name : ""}${costOf(m) ? "　" + yenIf(m) : ""}`)); t.append(w);
         const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dtext}　外せない移動`, moveForm(k, m, closeSheet)); t.append(ed);
-        n.append(t); warnEls(ev).forEach(x => n.append(x)); return n;
+        n.append(t);
+        { const miss = ["from", "to"].filter(w => !moveEnd(m, w)).map(w => w === "from" ? "出発地" : "到着地"); if (miss.length) n.append(el("span", "note mvpos", `${miss.join("・")}の位置がありません（編集で入れると、前後の移動時間を計算できます）`)); }
+        warnEls(ev).forEach(x => n.append(x)); return n;
       };
       const mealNode = ev => {
         const m = ev.m, key = ev.key, label = ev.label, n = el("div", "node");
@@ -2062,7 +2091,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const slotZone = ev => {
         const sl = ev.sl, label = SLOTS.find(x => x[0] === sl)[1], z = el("div", "dz"); z.dataset.drop = "slot"; z.dataset.date = k; z.dataset.slot = sl; z.setAttribute("aria-label", `${dtext} ${label}`);
         const zt = el("div", "zt", SLOT_SHORT[sl]); zt.append(el("small", null, label.replace(/^[^（]*/, "").replace(/[（）]/g, ""))); z.append(zt);
-        const anc = slotAnchor(k, da, sl), nxt = slotNext(k, da, sl);
+        const anc = ev.origin || slotAnchor(k, da, sl), nxt = slotNext(k, da, sl);
         if (anc) z.append(el("div", "anc", `起点：${anc.label}`));
         if (!ev.items.length) z.append(el("div", "hint", "ここにカードをドロップ"));
         let prevSpot = null; // 何もしない時間をはさんでも、移動は「前の場所→つぎの場所」でつなぐ
