@@ -229,6 +229,8 @@ details.card[open] > summary{margin-bottom:10px}
 .dchip.fr .frico{font-weight:700;color:var(--muted);padding:0 6px}
 .dchip.fr .nm{flex:1;min-width:0}
 .frb{align-self:flex-start;font-size:13px}
+.wxcard{display:flex;flex-direction:column;gap:2px;background:var(--accent-soft);border-radius:12px;padding:8px 12px;font-size:14px}
+.wxcard .wxrow.wet{color:var(--star);font-weight:700}
 .rentcard{display:flex;flex-direction:column;gap:2px;border:1.5px dashed var(--accent);border-radius:12px;padding:8px 12px;font-size:14px}
 .rentcard .rl{color:var(--ink)}
 .sub.cost,.cost{color:var(--accent);font-weight:700}
@@ -1528,6 +1530,70 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     return out.sort((a, b) => a.pk.localeCompare(b.pk));
   }
   const rentalLine = (r, pk) => [r.company, r.car, `受け取り ${[r.pickPlace, r.pickTime].filter(Boolean).join(" ") || "未入力"}`, `返却 ${[r.retDate && r.retDate !== pk ? md(r.retDate) : "", r.retPlace || (r.pickPlace ? "（受け取りと同じ）" : ""), r.retTime].filter(Boolean).join(" ") || "未入力"}`, costOf(r) ? "約" + yenIf(r) : "", r.resno ? "予約番号 " + r.resno : "", r.memo].filter(Boolean).join("／");
+  // ---- 天気予報（Open-Meteo。16日先まで。日ごとの「朝の拠点」「夜の拠点」の位置（なければ、その日の最初の場所）の予報を、自動で取る） ----
+  // 送るのは、位置を0.1度（約10km）にまるめた緯度・経度だけ。結果は手元に3時間ためる（localStorage `tabi-navi-wx`）
+  const WX_KEY = "tabi-navi-wx", WX_TTL = 3 * 3600e3, WX_RETRY = 10 * 60e3, WX_DAYS = 16;
+  const WX_ICON = { sun: "☀️", part: "🌤️", cloud: "☁️", fog: "🌫️", rain: "🌧️", shower: "🌦️", snow: "❄️", storm: "⛈️" };
+  function wxKind(c){ // WMO の天気コード → { text, icon, wet }（wet＝雨・雪の天気）
+    if (c === 0) return { text: "快晴", icon: WX_ICON.sun, wet: false }; if (c === 1) return { text: "晴れ", icon: WX_ICON.sun, wet: false };
+    if (c === 2) return { text: "晴れ時々くもり", icon: WX_ICON.part, wet: false }; if (c === 3) return { text: "くもり", icon: WX_ICON.cloud, wet: false };
+    if (c === 45 || c === 48) return { text: "霧", icon: WX_ICON.fog, wet: false };
+    if (c >= 51 && c <= 57) return { text: "霧雨", icon: WX_ICON.rain, wet: true }; if (c >= 61 && c <= 67) return { text: "雨", icon: WX_ICON.rain, wet: true };
+    if (c >= 71 && c <= 77) return { text: "雪", icon: WX_ICON.snow, wet: true }; if (c >= 80 && c <= 82) return { text: "にわか雨", icon: WX_ICON.shower, wet: true };
+    if (c === 85 || c === 86) return { text: "にわか雪", icon: WX_ICON.snow, wet: true }; if (c >= 95) return { text: "雷雨", icon: WX_ICON.storm, wet: true };
+    return { text: "不明", icon: "", wet: false };
+  }
+  const wxLoad = () => { try { const o = JSON.parse(localStorage.getItem(WX_KEY)); return o && typeof o === "object" ? o : {}; } catch { return {}; } };
+  const wxSave = o => { try { localStorage.setItem(WX_KEY, JSON.stringify(o)); } catch {} };
+  const wxKeyOf = p => `${(Math.round(p.lat * 10) / 10).toFixed(1)},${(Math.round(p.lng * 10) / 10).toFixed(1)}`;
+  // その日の予報の場所：朝の拠点・夜の拠点（近ければ1つにまとめる）。どちらも位置が分からなければ、その日の最初の場所
+  function wxPoints(k){
+    const list = dayList(), i = list.indexOf(k); if (i < 0) return [];
+    const am = effBase(list, i, "am"), pm = effBase(list, i, "pm"), out = [];
+    const a = hasBase(am) && hasPos(am) ? am : null, b = hasBase(pm) && hasPos(pm) ? pm : null;
+    if (a && b && km(a, b) > 15) out.push({ label: "朝の拠点まわり", name: baseName(a), p: a }, { label: "夜の拠点まわり", name: baseName(b), p: b });
+    else if (a || b) out.push({ label: "拠点まわり", name: baseName(a || b), p: a || b });
+    else { const id = ["am", "pm", "ev"].flatMap(sl => slotIds(k, sl)).find(x => hasPos(spotById(x))); if (id) out.push({ label: "最初の場所まわり", name: spotById(id).name, p: spotById(id) }); }
+    return out;
+  }
+  const wxInRange = k => { const t = dkey(new Date()); return k >= t && k <= dkey(new Date(Date.now() + (WX_DAYS - 1) * 86400000)); };
+  const wxFor = (pt, k) => { const e = wxLoad()[wxKeyOf(pt.p)]; return e && e.daily && e.daily[k] ? e.daily[k] : null; };
+  let wxBusy = false, wxFailed = false;
+  async function wxEnsure(){
+    if (wxBusy) return; const days = dayList().filter(wxInRange); if (!days.length) return;
+    const c = wxLoad(), need = new Map();
+    days.forEach(k => wxPoints(k).forEach(pt => { const key = wxKeyOf(pt.p), e = c[key]; if (e && ((e.at && Date.now() - e.at < WX_TTL && e.daily && days.every(d => !wxInRange(d) || e.daily[d])) || (e.fail && Date.now() - e.fail < WX_RETRY))) return; need.set(key, pt.p); }));
+    if (!need.size) return;
+    wxBusy = true; let got = false;
+    for (const [key, p] of need) {
+      const [lat, lng] = key.split(",");
+      try {
+        const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo&forecast_days=${WX_DAYS}`, { signal: ctl.signal });
+        clearTimeout(tm); if (!res.ok) throw new Error("http " + res.status);
+        const j = await res.json(), d = j.daily || {}, daily = {};
+        (d.time || []).forEach((t, i) => { daily[t] = { code: d.weather_code ? d.weather_code[i] : null, max: d.temperature_2m_max ? d.temperature_2m_max[i] : null, min: d.temperature_2m_min ? d.temperature_2m_min[i] : null, pop: d.precipitation_probability_max ? d.precipitation_probability_max[i] : null }; });
+        const all = wxLoad(); all[key] = { at: Date.now(), daily }; wxSave(all); got = true; wxFailed = false;
+      } catch { const all = wxLoad(); all[key] = Object.assign({}, all[key] || {}, { fail: Date.now() }); wxSave(all); wxFailed = true; }
+    }
+    wxBusy = false;
+    if (got || wxFailed) renderBoard();
+  }
+  const wxText = w => { const k = wxKind(w.code), t = [Number.isFinite(w.min) ? Math.round(w.min) : null, Number.isFinite(w.max) ? Math.round(w.max) : null]; return `${k.text}${t[0] != null && t[1] != null ? `　${t[0]}〜${t[1]}℃` : t[1] != null ? `　最高${t[1]}℃` : ""}${Number.isFinite(w.pop) ? `　降水確率${Math.round(w.pop)}%` : ""}`; };
+  // お願い文に入れる、その日の天気の1行（予報が取れていないときは空）
+  const wxLine = k => wxInRange(k) ? wxPoints(k).map(pt => { const w = wxFor(pt, k); return w ? `${pt.label}（${pt.name}）：${wxText(w)}` : ""; }).filter(Boolean).join("／") : "";
+  const wxWet = k => wxPoints(k).some(pt => { const w = wxFor(pt, k); return w && (wxKind(w.code).wet || w.pop >= 60); });
+  // その日の天気のカード（日ごとの画面の上）
+  function wxCard(k){
+    if (!wxInRange(k)) return null;
+    const pts = wxPoints(k), card = el("div", "wxcard"); card.dataset.date = k;
+    if (!pts.length) { card.append(el("b", null, "天気予報"), el("span", "note", "拠点（朝か夜）の位置が分かると、その場所の予報が出ます。拠点を入れてください。")); return card; }
+    card.append(el("b", null, "天気予報（目安）"));
+    let any = false;
+    pts.forEach(pt => { const w = wxFor(pt, k); if (!w) return; any = true; const kd = wxKind(w.code); const row = el("span", "wxrow", `${kd.icon ? kd.icon + " " : ""}${pts.length > 1 ? pt.label + "（" + pt.name + "）：" : ""}${wxText(w)}`); if (kd.wet || w.pop >= 60) row.classList.add("wet"); card.append(row); });
+    if (!any) card.append(el("span", "note", wxBusy ? "予報を取っています…" : wxFailed ? "予報を取れませんでした（通信を確認してください）。" : "予報を取っています…"));
+    return card;
+  }
   // その日の合計（場所は、枠に入れたもの）と、旅ぜんぶの合計
   function dayCostParts(k){
     const d = state.plan.days[k] || {}, ids = ["am", "pm", "ev"].flatMap(sl => slotIds(k, sl));
@@ -1943,6 +2009,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       aar.onclick = () => openSheet(`${dtext}　エリア`, areaBox(k));
       const rts = rentalsFor(k), arent = el("button", "pillbtn addrent", "＋ レンタカー"); arent.type = "button"; arent.dataset.date = k; arent.onclick = () => openSheet(`${dtext}　レンタカー`, rentalForm(k, closeSheet));
       act.append(aar, amv, ...(rentalOf(k) ? [] : [arent]), aex); dv.append(act);
+      { const wc = wxCard(k); if (wc) dv.append(wc); }
       rts.forEach(({ r, pk, end, role }) => {
         const card = el("div", "rentcard"); card.dataset.role = role; card.dataset.date = k;
         const head = role === "mid" ? `レンタカー使用中（${md(pk)} 受け取り〜${md(end)} 返却）` : role === "ret" ? `レンタカーを返す日（${md(pk)} に受け取り）` : role === "pick" ? `レンタカーを受け取る日（${md(end)} に返却）` : "レンタカー（この日に受け取って返す）";
@@ -2065,6 +2132,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     box.append(expRow, ...(tb ? [tb] : []), tabs, days, tray);
     showDay(boardDay);
     if (Math.abs(scrollY - keepY) > 0) scrollTo(0, keepY);
+    setTimeout(wxEnsure, 0); // 天気予報：足りない分だけ取りにいく（取れたら、もう一度だけ画面を作りなおす）
   }
   function startDrag(e, id, chip, hd){
     if (e.button != null && e.button > 0) return;
@@ -2961,6 +3029,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
     L.push("");
     if (hubs().length) { L.push("## 交通の拠点（駅・バス停など）"); hubs().forEach(h => { const d = distText(h, ad); L.push(`- ${h.kind}：${h.name}${h.address ? "（" + h.address + "）" : ""}${d ? "　" + d : ""}`); }); L.push(""); }
+    const wxL = ad ? wxLine(ad.date) : "";
+    if (wxL) L.push("## 今日の天気予報（目安）", `- ${wxL}`, "");
     const rentLines = ad ? ad.rentals.map(x => `- ${rentalLine(x.r, x.pk)}（${x.role === "mid" ? "使用中" : x.role === "ret" ? "今日返却" : x.role === "pick" ? "今日受け取り" : "今日受け取って返却"}）`) : [];
     if (rentLines.length) L.push("## レンタカー（借りている・借りる予定）", ...rentLines, "");
     const moveLines = ad ? ad.moves.map(m => `- ${moveText(m)}`) : [];
@@ -2997,6 +3067,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       ...(mealLines.length ? ["- 食事の希望は、できるだけ生かして時間を組む（ルートの都合で、時間や場所は変えてもよい）。希望のない食事は、ルートの近くで探してよい"] : []),
       ...(ad && ad.area ? [`- 今日のエリア（${ad.area}）の場所を優先して組む。ほかのエリアの場所は、近いときだけ入れる`] : []),
       ...(mine ? ["- 「自分で組んだ今日の予定」の区分（午前・午後・夜）と順番を基本にして時刻を組む。無理なら入れかえてよいが、理由を書く"] : []),
+      ...(wxL ? [`- 天気予報を考えて組む${wxWet(ad.date) ? "（雨・雪のおそれがある。屋内の場所や、濡れにくい順番を優先し、傘・寒さの注意も一言そえる）" : ""}`] : []),
       ...(rentLines.length ? ["- レンタカーは、受け取り・返却の場所と時刻を守る（返却前に給油・駐車場所の確認の余裕を取る）。車で行くので、駐車場や道の混み具合も考えて組む"] : []),
       ...(moveLines.length ? [`- 外せない移動は、時刻も乗り場も動かさない。出発の${ad.moves.some(m => m.kind === "飛行機") ? "30分〜1時間" : "30分"}前までに乗り場に着けるよう、他の予定をその前後に収める。間に合わない予定は外し、危ういときは正直に伝える`] : []),
       "- 移動ごとに出発時刻・手段（路線やバス停）・所要時間・運賃の目安と、Googleマップの経路リンク",
@@ -3024,7 +3095,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   }
   // 旅の前の計画用：行きたい場所を、拠点からの距離で日ごとに割りふってもらう
   function buildPlanPrompt(){
-    const list = dayList(), S = id => $(id).value.trim(), bases = []; let anyMeal = false, anyMove = false, anyOwn = false, anyArea = false;
+    const list = dayList(), S = id => $(id).value.trim(), bases = []; let anyMeal = false, anyMove = false, anyOwn = false, anyArea = false, anyWx = false;
     const keyOf = b => (b.name || "") + "|" + (b.address || "");
     const letter = b => { const k = keyOf(b); let i = bases.findIndex(x => keyOf(x) === k); if (i < 0) { bases.push(b); i = bases.length - 1; } return String.fromCharCode(65 + i); };
     const L = ["旅先の案内係として、旅全体の日割りプランを考えてください。", "", "## 日程と拠点"];
@@ -3032,6 +3103,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       const ml = MEALS.filter(([key]) => hasMeal(mealsOf(k)[key])).map(([key, label]) => `${label} ${mealText(mealsOf(k)[key], k)}`);
       const ar = areaOfDay(k); if (ar) { L.push(`  エリア：${ar}`); anyArea = true; }
       const own = slotLine(k); if (own) { L.push(`  自分で組みずみ：${own}`); anyOwn = true; }
+      const wl = wxLine(k); if (wl) { L.push(`  天気予報：${wl}`); anyWx = true; }
       const rl = rentalsFor(k).filter(x => x.role === "pick" || x.role === "same" || x.role === "ret").map(x => `${x.role === "ret" ? "返却" : "受け取り"}：${rentalLine(x.r, x.pk)}`); if (rl.length) L.push(`  レンタカー：${rl.join("／")}`);
       const mvl = movesOf(k).map(moveText);
       if (mvl.length) { L.push(`  外せない移動（動かせない）：${mvl.join("／")}`); anyMove = true; }
@@ -3058,6 +3130,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       ...(hubs().length ? ["- 登録した交通の拠点（駅・バス停など）を乗り降りの起点にして、日ごとに乗る駅・降りる駅（バス停）を書く"] : []),
       ...(anyArea ? ["- 日ごとの「エリア」に合う場所（場所のエリアと同じ、または近い）を、その日に割りふる。エリアのちがう場所は、近いときだけ"] : []),
       ...(anyOwn ? ["- 「自分で組みずみ」の場所は、その日・その区分のまま変えない。まだ入れていない場所だけを割りふる"] : []),
+      ...(anyWx ? ["- 日ごとの「天気予報」も考える。雨・雪のおそれがある日は、屋内の場所や近い場所を割りふり、屋外の場所は天気のよい日へ回す"] : []),
       ...(anyMove ? ["- 日ごとの「外せない移動」は動かせない。時刻と乗り場を守り、その前後（乗り場に着く余裕を含む）に他の予定を収める。収まらない日は、正直に伝える"] : []),
       ...(anyMeal ? ["- 日ごとの食事の希望は、できるだけ生かす（ルートの都合で変えてもよい）。希望のない食事は、その日のルートの近くで探してよい"] : []),
       "- 最初に日割りの一覧（日／朝の拠点／回る場所／夜の拠点）、そのあと日ごとの詳細。確かめられない情報は「要確認」");
