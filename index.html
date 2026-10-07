@@ -297,6 +297,9 @@ h2{font-size:21px}
 .wrap{gap:16px;padding-top:0}
 /* 説明文（HTMLに書いてある長い案内）は出さない。もどすときは、次の1行を消す */
 .expl{display:none!important}
+/* ほかの説明（枠の時間帯の小さな説明・「またはカードをここへ」・空の枠のドロップ案内）も出さない。空の枠の点線の箱は、ドロップ先として残す */
+.dz .zt small,.mealhint,.mvpos{display:none!important}
+.dz .hint{font-size:0;min-height:44px;padding:0}
 /* 角の「＋」マーク（カード・場所カード・金額・天気・レンタカー） */
 .card,#board .dz .dchip:not(.fr),.wxcard,.daycost,.rentcard{position:relative}
 .card::before,#board .dz .dchip:not(.fr)::before,.wxcard::before,.daycost::before,.rentcard::before{content:"";position:absolute;inset:-6px;pointer-events:none;--c:color-mix(in srgb,var(--ink) 55%,transparent);
@@ -763,7 +766,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       <p class="note expl">2本の指でひらく・とじる（ピンチ）か、ボタンで拡大・縮小できます。拡大したあとは、指でなぞって動かせます（パソコンは、Ctrlを押しながらホイールでも拡大・縮小できます）。</p>
       <div id="map-box"></div>
       <div class="legend" id="map-legend"></div>
-      <p class="note" id="map-info" style="color:var(--ink)"></p>
+      <p class="note expl" id="map-info" style="color:var(--ink)"></p>
       <p class="note" id="map-note"></p>
     </div>
   </details>
@@ -787,7 +790,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       <label>旅のメモ（Claudeに毎回伝えたいこと）<textarea id="trip-memo" maxlength="400" placeholder="例：母と2人旅。階段が多い所は少なめに。ICOCA持ち。お昼は和食がいい"></textarea></label>
       <label class="row" style="flex-direction:row;gap:8px;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="allow-new" style="width:auto" checked> リストにない近くのおすすめも提案してもらう</label>
       <div class="stack" style="gap:6px">
-        <span class="note" id="bk-note">バックアップ：データはこのスマホのブラウザにだけ保存されています。機種変更やブラウザ変更の前にコピーしておくと安心です。</span>
+        <span class="note expl" id="bk-note">バックアップ：データはこのスマホのブラウザにだけ保存されています。機種変更やブラウザ変更の前にコピーしておくと安心です。</span>
         <div class="row">
           <button class="btn ghost small" type="button" id="export">データをコピー</button>
           <button class="btn ghost small" type="button" id="import-open">データを貼り付けて復元</button>
@@ -1867,13 +1870,13 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   // その日の「エリア」の入力欄（日ごとの詳細と、日ごとの画面の窓の両方で使う）。複数のエリアを選べる
   function areaBox(k){
     const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.areabox = k;
-    box.append(el("span", "note", "この日のエリア（いくつでも選べます。例：新潟市、長岡）。登録リストでは、どれかのエリアに合う場所が先に並びます。"));
+    box.append(el("span", "note expl", "この日のエリア（いくつでも選べます。例：新潟市、長岡）。登録リストでは、どれかのエリアに合う場所が先に並びます。"));
     const inp = mkInput("a-in", "この日のエリア（「、」でつなぐ）", 80); inp.setAttribute("list", "area-list"); inp.placeholder = "エリア名（空なら指定なし）"; inp.value = areaOfDay(k);
     const chips = el("div", "row"); chips.style.gap = "6px";
     const paint = () => { const cur = splitAreas(inp.value); chips.textContent = ""; [...new Set([...allAreas(), ...cur])].forEach(a => { const b = el("button", "pillbtn", a); b.type = "button"; b.setAttribute("aria-pressed", cur.includes(a) ? "true" : "false"); b.onclick = () => { const c = splitAreas(inp.value); inp.value = joinAreas(c.includes(a) ? c.filter(x => x !== a) : [...c, a]); commit(); }; chips.append(b); }); };
     const commit = () => { const v = joinAreas(splitAreas(inp.value)); inp.value = v; const day = state.plan.days[k] = state.plan.days[k] || {}; if (v) day.area = v; else delete day.area; pruneDay(k); changePlan(); refreshPlanLabels(); paint(); };
     inp.onchange = commit;
-    box.append(inp, el("span", "note", "登録した場所のエリア（タップで、入れる・外す）"), chips); paint();
+    box.append(inp, el("span", "note expl", "登録した場所のエリア（タップで、入れる・外す）"), chips); paint();
     return box;
   }
   // 外せない移動の入力欄（追加にも編集にも使う。mv があれば編集）
@@ -1969,7 +1972,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   }
   function moveEditor(k){
     const wrap = el("div", "stack"); wrap.style.gap = "8px"; wrap.dataset.moves = k;
-    wrap.append(el("span", "note", "絶対に外せない移動（新幹線・飛行機など。拠点より優先して、ルートの提案に伝えます）"));
+    wrap.append(el("span", "note expl", "絶対に外せない移動（新幹線・飛行機など。拠点より優先して、ルートの提案に伝えます）"));
     movesOf(k).forEach(m => {
       const r = el("div", "mem"); r.append(el("span", null, moveText(m)));
       const ed = el("button", "link", "編集"); ed.type = "button"; ed.onclick = () => openSheet(`${dayLabel(k, dayList().indexOf(k))}　外せない移動`, moveForm(k, m, closeSheet));
@@ -2380,7 +2383,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const tray = buildTray(open);
     const expRow = el("div", "dayact"); expRow.id = "board-export";
     const eall = el("button", "pillbtn exp", "全部の日をカレンダーへ"); eall.type = "button"; eall.id = "exp-all"; eall.onclick = () => exportIcs(list);
-    expRow.append(eall, el("span", "note", "iPhoneのカレンダーに入れるファイルを作ります。「頃」の時刻は目安です。"));
+    expRow.append(eall, el("span", "note expl", "iPhoneのカレンダーに入れるファイルを作ります。「頃」の時刻は目安です。"));
     const tc = list.reduce((a, k) => { const c = dayCostParts(k); a.t += c.total; a.sp += c.spot; a.me += c.meal; a.mo += c.move; a.st += c.stay; a.re += c.rental; return a; }, { t: 0, sp: 0, me: 0, mo: 0, st: 0, re: 0 });
     const rest = open.filter(x => !whereIs(x.id)).reduce((a, x) => a + costOf(x), 0);
     let tb = null;
@@ -2478,7 +2481,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   function mkInput(cls, label, max){ const i = el("input"); i.className = cls; i.maxLength = max; i.setAttribute("aria-label", label); return i; }
   function mealEditor(k){
     const wrap = el("div", "stack"); wrap.style.gap = "12px";
-    wrap.append(el("span", "note", "食事の希望（あくまで希望として、ルートの提案に伝えます）。お店が決まっていないときは、「風まかせ」か「駅」を選べます。"));
+    wrap.append(el("span", "note expl", "食事の希望（あくまで希望として、ルートの提案に伝えます）。お店が決まっていないときは、「風まかせ」か「駅」を選べます。"));
     MEALS.forEach(([key, label]) => wrap.append(mealBox(k, key, label)));
     return wrap;
   }
