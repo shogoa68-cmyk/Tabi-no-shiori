@@ -3,29 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#2F6F62">
+<meta name="theme-color" content="#f2f2f3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="旅ナビ">
 <title>いまから旅ナビ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
 <style>
 /* Layout: スマホ片手で使う1列。上に「いま」（時刻・現在地）、まん中に行きたい場所、下に固定の「ルートを聞く」ボタン */
 :root{
-  --bg:#F3F6F2; --paper:#FFFFFF; --ink:#1D2B36; --muted:#5E6E78; --line:#D9E1DC;
-  --accent:#2F6F62; --accent-soft:#E2EFEA; --star:#C4533A; --warn-soft:#F8E6E0;
-  --sl-am-bg:#E6F1F8; --sl-am-bar:#4B9BCB; --sl-pm-bg:#FDF0DC; --sl-pm-bar:#E39A2D; --sl-ev-bg:#EAE9F8; --sl-ev-bar:#6A62C6;
-  --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN",system-ui,sans-serif;
-  --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  /* デザイン改修 1b（Industry・ブループリント調）。名前は前のまま、色と字だけ入れかえた */
+  --bg:#f2f2f3; --paper:#f2f2f3; --ink:#1d1f20; --muted:#686a6b; --line:#cfd0d1;
+  --accent:#5980a6; --accent-soft:#eef6ff; --star:#b5432d; --warn-soft:#f6e4de;
+  --accent-100:#eef6ff; --accent-200:#d6ebff; --accent-300:#b5d9fd; --accent-400:#94bce3; --accent-500:#749dc4; --accent-600:#597ea3; --accent-700:#416180; --accent-800:#2c455d; --accent-900:#1d2d3d;
+  --neutral-100:#f5f5f8; --neutral-200:#e7e7ea; --neutral-300:#d4d4d7;
+  --atext:#416180; --sel-bg:#1d2d3d; --sel-fg:#f2f2f3; --prim-bg:#5980a6; --prim-fg:#ffffff; --prim-bd:#2c455d; --veil:rgba(29,31,32,.4);
+  --sl-am-bg:#eef6ff; --sl-am-bar:#749dc4; --sl-pm-bg:#e7e7ea; --sl-pm-bar:#7a7a7d; --sl-ev-bg:#d6e3f0; --sl-ev-bar:#2c455d;
+  --display:"Barlow Condensed","Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --body:"Barlow","Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --mono:"Barlow Condensed","Zen Kaku Gothic New",ui-monospace,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#141B20; --paper:#1C252C; --ink:#E6ECEF; --muted:#9AA8B1; --line:#2F3B43;
-  --accent:#6FC2AE; --accent-soft:#1F3833; --star:#F08A70; --warn-soft:#3A2520; color-scheme:dark;
-  --sl-am-bg:#1B2F3B; --sl-am-bar:#5DB0E0; --sl-pm-bg:#3A2E1B; --sl-pm-bar:#E8A94A; --sl-ev-bg:#26264A; --sl-ev-bar:#8F88E6}}
+  /* 暗い画面は、デザイン案にまだ無いので、同じ作りで暗い階調を当てた（押した色は accent-400 側） */
+  --bg:#141618; --paper:#141618; --ink:#e9eaeb; --muted:#9a9ea1; --line:#34383b;
+  --accent:#749dc4; --accent-soft:#1d2d3d; --star:#f08a70; --warn-soft:#3a2520;
+  --atext:#94bce3; --sel-bg:#416180; --sel-fg:#ffffff; --prim-bg:#597ea3; --prim-fg:#ffffff; --prim-bd:#94bce3; --veil:rgba(0,0,0,.55);
+  --sl-am-bg:#1d2d3d; --sl-am-bar:#749dc4; --sl-pm-bg:#26282b; --sl-pm-bar:#7a7a7d; --sl-ev-bg:#223347; --sl-ev-bar:#94bce3;
+  color-scheme:dark}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
@@ -253,10 +260,11 @@ details.card[open] > summary{margin-bottom:10px}
 .mp .ring{fill:none;stroke:var(--line);stroke-dasharray:3 3}
 .mp .axis{stroke:var(--line);stroke-width:1}
 .mp text.rl{fill:var(--muted)}
-.mp .p3{fill:var(--star)}.mp .p2{fill:var(--accent)}.mp .p1{fill:var(--muted)}
+.mp .p3{fill:var(--accent-700)}.mp .p2{fill:var(--accent-400)}.mp .p1{fill:var(--bg)}
+.mp rect.p3,.mp rect.p2,.mp rect.p1{stroke:var(--ink);stroke-width:1}
 .mp .base{fill:var(--ink)}
 .mp .far{opacity:.3}
-.mp .sel{stroke:var(--ink);stroke-width:2.5}
+.mp .sel{stroke:var(--ink)!important;stroke-width:2.5!important;fill:var(--accent)!important}
 .mp .hit{fill:transparent;cursor:pointer}
 .mp .link{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 3;opacity:.6}
 .mp .scalebar{stroke:var(--ink);stroke-width:3;stroke-linecap:round}
@@ -278,6 +286,216 @@ details.rt[open] > summary{margin-bottom:8px}
 .guard ol{margin:0;padding-left:1.4em}
 .guard li+li{margin-top:2px}
 pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:260px;overflow:auto;margin:0;user-select:all}
+/* ===================== デザイン改修 1b（Industry・ブループリント調） =====================
+   角丸なし・細い罫線・影なし・角の「＋」マーク・鋼青のアクセント。HTML・id・JS は変えず、見た目だけをここで置きかえる */
+*{border-radius:0!important;box-shadow:none!important}
+body{font-size:14px;line-height:1.55}
+a,.link,.backbtn,.mlink,.leg a,.eyebrow,.areanote,.sub.cost,.cost,.leg .link{color:var(--atext)}
+h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:-.01em}
+h2{font-size:21px}
+.eyebrow{font-size:10px;letter-spacing:.14em;font-weight:500}
+.wrap{gap:16px;padding-top:0}
+/* 角の「＋」マーク（カード・場所カード・金額・天気・レンタカー） */
+.card,#board .dz .dchip:not(.fr),.wxcard,.daycost,.rentcard{position:relative}
+.card::before,#board .dz .dchip:not(.fr)::before,.wxcard::before,.daycost::before,.rentcard::before{content:"";position:absolute;inset:-6px;pointer-events:none;--c:color-mix(in srgb,var(--ink) 55%,transparent);
+  background:linear-gradient(var(--c),var(--c)) 5px 0/1px 11px no-repeat,linear-gradient(var(--c),var(--c)) 0 5px/11px 1px no-repeat,
+  linear-gradient(var(--c),var(--c)) right 5px top 0/1px 11px no-repeat,linear-gradient(var(--c),var(--c)) right 0 top 5px/11px 1px no-repeat,
+  linear-gradient(var(--c),var(--c)) left 5px bottom 0/1px 11px no-repeat,linear-gradient(var(--c),var(--c)) left 0 bottom 5px/11px 1px no-repeat,
+  linear-gradient(var(--c),var(--c)) right 5px bottom 0/1px 11px no-repeat,linear-gradient(var(--c),var(--c)) right 0 bottom 5px/11px 1px no-repeat}
+.card{background:transparent;border:1px solid var(--line);padding:14px}
+.card.guard{border-color:var(--star);background:var(--warn-soft)}
+.card.qa{border:1px solid var(--line)}
+#qa-card h2::before,#board-card h2::before{display:block;font:500 10px var(--body);letter-spacing:.14em;color:var(--atext);margin-bottom:2px}
+#qa-card h2::before{content:"STEP 01"}#board-card h2::before{content:"STEP 02"}
+details.card>summary{font-family:var(--display);font-size:20px;font-weight:600}
+details.card>summary::after{color:var(--atext)}
+/* 入力欄：高さ44・文字16・背景なし・罫線 */
+input:not([type=checkbox]):not([type=radio]),select,textarea{background:transparent;border:1px solid var(--line);min-height:44px;padding:0 10px}
+textarea{padding:10px}
+input:not([type=checkbox]):not([type=radio]):hover,select:hover,textarea:hover{border-color:color-mix(in srgb,var(--ink) 45%,transparent)}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label{font-size:12px;color:var(--ink);opacity:1}
+label>input,label>select{font-weight:400}
+.note{color:var(--muted)}
+/* ボタン：主＝アクセント塗り（唯一の塗り）、副＝透明＋罫線、選択中のチップ＝濃い塗り */
+.btn{min-height:44px;padding:0 16px;background:var(--prim-bg);color:var(--prim-fg);border:1px solid var(--prim-bd);font-weight:700}
+.btn:hover{background:var(--accent-600)}
+.btn.small{min-height:36px;padding:0 12px;font-size:13px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover,.pillbtn:hover,.quick button:hover{background:var(--accent-soft)}
+.btn.ghost.on{background:var(--sel-bg);color:var(--sel-fg);border-color:var(--sel-bg)}
+.pillbtn{border:1px solid var(--line);background:transparent;color:var(--ink);padding:4px 12px;min-height:32px}
+.pillbtn[aria-pressed=true]{background:var(--sel-bg);color:var(--sel-fg);border-color:var(--sel-bg)}
+.pillbtn.exp{background:var(--prim-bg);color:var(--prim-fg);border:1px solid var(--prim-bd)}
+.pillbtn.addrent,.pillbtn.addmv,.pillbtn.areabtn{border:1px dashed var(--accent-700)}
+.quick button{border:1px solid var(--line);background:transparent;color:var(--ink);padding:6px 12px;min-height:36px}
+.link{color:var(--atext)}
+.like{border:1px solid var(--line);background:transparent}.like[aria-pressed=true]{background:var(--sel-bg);color:var(--sel-fg);border-color:var(--sel-bg)}
+.prio button{border:1px solid var(--line);background:transparent;min-height:36px;padding:0 14px}.prio button[aria-pressed=true]{background:var(--sel-bg);border-color:var(--sel-bg);color:var(--sel-fg)}
+.go{font-family:var(--body);font-weight:700;font-size:16px;min-height:50px;padding:0 16px}
+/* 上の帯（キッカー＋見出し＋メニュー）。画面の上にとまる */
+.topbar,.subbar{position:sticky;top:0;z-index:35;margin:0 -16px;background:var(--bg);border-bottom:1px solid var(--ink);padding:env(safe-area-inset-top,0px) 0 0;display:flex;align-items:stretch;gap:0;min-height:calc(56px + env(safe-area-inset-top,0px))}
+.topbar>header{justify-content:center;padding:6px 16px;gap:0!important}
+.topbar h1{font-size:24px!important;line-height:1.1;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar>header{min-width:0}
+#h-sub{display:none}
+.topbar .menubtn,.subbar .menubtn{position:static;width:56px;height:auto;min-height:56px;border:0;border-left:1px solid var(--line);background:transparent;gap:6px}
+.menubtn span{width:22px;height:1.5px;background:var(--ink)}
+.topbar{padding-right:0}
+.subbar{padding-top:env(safe-area-inset-top,0px)}
+.subbar b{font-family:var(--display);font-size:20px;line-height:1.15;font-weight:600;align-self:center}
+.subbar .backbtn{padding:0 16px;border-right:1px solid var(--line);text-decoration:none;font-size:13px}
+/* 計画する／いま使う */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0;background:transparent;border:1px solid var(--ink)}
+.seg button{min-height:44px;color:var(--ink);font-weight:700;border:0;background:transparent}
+.seg button+button{border-left:1px solid var(--ink)}
+.seg button[aria-selected=true]{background:var(--sel-bg);color:var(--sel-fg)}
+/* 手順の帯 */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line)}
+.steps button{border:0;border-right:1px solid var(--line);background:transparent;padding:10px;display:flex;flex-direction:column;gap:2px}
+.steps button:last-child{border-right:0}
+.steps button b{display:flex;flex-direction:column;align-items:flex-start;gap:2px;font-family:var(--body);font-size:12px}
+.steps button b i{width:auto;height:auto;background:none!important;color:var(--ink)!important;font:600 28px/1 var(--display);display:block}
+.steps button small{font:600 13px var(--display);color:var(--ink);opacity:.8;margin:0}
+.steps button.cur{background:var(--accent-soft)}
+.steps button.cur b i{color:var(--atext)!important}
+/* いま使う */
+.clock .t{font:500 64px/1 var(--display);letter-spacing:0}
+.clock .d{font-family:var(--body);font-size:12px;color:var(--muted)}
+.here .pin{background:transparent;border:1px solid var(--line)}.here .pin svg{fill:var(--atext)}
+/* 日タブ・日ごとの画面（時刻表） */
+#board-tabs{gap:0;padding:0;border:1px solid var(--line);overflow-x:auto}
+.dtab{border:0;border-right:1px solid var(--line);background:transparent;padding:8px 14px;text-align:left;min-height:48px}
+.dtab b{font:600 13px var(--display);letter-spacing:.1em}
+.dtab small{font-size:12px}
+.dtab.on{background:var(--prim-bg);color:var(--prim-fg)}
+.dtab.over{outline:2px solid var(--accent);outline-offset:-2px}
+.dayv{gap:12px}
+.rail{margin:0;padding:0;border-left:0;gap:0;border-top:1px solid var(--line)}
+.node{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:8px 8px 8px 92px;min-height:48px;border-bottom:1px solid var(--line);color:var(--ink);font-size:14px}
+.node::before{display:none}
+.node b{margin-right:0;font-family:var(--body);font-weight:700}
+.node .tm{position:absolute;left:0;top:0;bottom:0;width:80px;min-width:0;margin:0;padding:10px 0 0 14px;border-right:1px solid var(--line);font:600 16px var(--display);color:var(--atext);white-space:nowrap}
+.node .tm.fx{color:var(--atext)}
+.node .mealbtn,.node .basebtn{margin-left:auto!important;min-height:32px;padding:0 10px;border:1px solid var(--accent);background:transparent;color:var(--atext);font-size:12px;text-decoration:none}
+.node .mealbtn.pillbtn,.node .basebtn.pillbtn{border-style:solid}
+.node .mlink{margin:0 0 0 4px}
+.node .warn,.node .note{flex-basis:100%}
+.node.over{outline:2px solid var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.mvnode{padding:0;display:block}
+.mvnode>.note,.mvnode>.warn{padding:4px 12px}
+.tkt{background:var(--sel-bg);color:var(--sel-fg);border:0;padding:10px 12px;font-size:12px;align-items:flex-start}
+.tkt .tm{position:static;border:0;padding:0;width:auto;color:var(--sel-fg);font:600 18px var(--display)}
+.tkt .kd{color:var(--sel-fg);opacity:.8;font-size:10px;letter-spacing:.1em}
+.tkt a,.tkt .link{color:var(--sel-fg);border:1px solid var(--sel-fg);padding:4px 8px;text-decoration:none;font-size:12px;font-weight:700;flex:none}
+.tkt span:not(.tm):not(.kd){font:600 20px/1.2 var(--display)}
+/* 午前・午後・夜 */
+.dz{background:transparent;padding:0 0 10px;gap:8px;border-bottom:1px solid var(--line);min-height:0}
+.dz::before{display:none}
+.dz .zt{display:flex;align-items:baseline;gap:8px;padding:10px 12px;font:600 20px var(--display);background:var(--bar-bg,var(--accent-soft))}
+.dz .zt::before{content:"SLOT";font:600 11px var(--display);letter-spacing:.14em;color:var(--atext)}
+.dz .zt small{font:400 11px var(--body);margin:0;color:var(--muted)}
+.dz[data-slot=am]{--bar-bg:var(--sl-am-bg)}.dz[data-slot=pm]{--bar-bg:var(--sl-pm-bg)}.dz[data-slot=ev]{--bar-bg:var(--sl-ev-bg)}
+.dz>*:not(.zt){margin-inline:12px}
+.dz.over{outline:2px solid var(--accent);outline-offset:-2px}
+.dz.endins{box-shadow:none!important;border-bottom:3px solid var(--accent)}
+.dz .hint{background:transparent;border:1px dashed var(--accent-700)}
+.dchip{background:transparent;border:1px solid var(--line);padding:8px 10px;font-size:14px}
+.dchip.p3,.dchip.p2{border-left:1px solid var(--line)}
+.dchip .nm{font:600 19px/1.15 var(--display)}
+.dchip .no{background:none;color:var(--atext);width:auto;height:auto;font:600 19px/1.15 var(--display)}
+.dchip .hd{background:transparent;border-right:1px solid var(--line);margin:-8px 0 -8px -10px;width:36px}
+.dchip.ins{box-shadow:none!important;border-top:3px solid var(--accent)}
+.dchip.ghost{background:var(--bg);border:1px solid var(--accent)}
+.dchip.fr{border-style:dashed}
+.dchip .cedit,.sgb,.frb{color:var(--atext)}
+.dchip .sub{font-size:12px}
+.leg{justify-content:flex-start;text-align:left;font-size:11.5px;padding:0}
+.sg{border-top:1px dashed var(--accent-700)}
+.sgr{background:transparent;border:1px solid var(--line)}
+.anc{color:var(--muted)}
+/* 金額・天気・レンタカー・注意 */
+.wxcard,.daycost,.rentcard{background:transparent;border:1px solid var(--line);padding:12px}
+.wxcard>b,.daycost>b{font:600 18px var(--display)}
+.rentcard{border-style:solid}
+.rentcard>b{font:600 18px var(--display)}
+.daywarn{background:var(--warn-soft);border:1px solid var(--star)}
+.warn,.msg{color:var(--star)}
+.dayact{gap:6px}
+/* 下に固定の部品 */
+#board-tray{background:var(--bg);border:0;border-top:1px solid var(--ink);padding:8px 8px 10px}
+#board-tray.over{background:var(--accent-soft);border-top-color:var(--accent)}
+#board-tray .tview{border:1px solid var(--line)}
+#board-tray .tview button{color:var(--ink)}
+#board-tray .tview button[aria-pressed=true]{background:var(--sel-bg);color:var(--sel-fg)}
+#board-tray .dchip .tag,.tag{background:var(--accent-soft);color:var(--atext);padding:0 8px}
+.dock{background:var(--bg);border-top:1px solid var(--ink)}
+.bulkbar{background:var(--bg);border:1px solid var(--ink)}
+.toast{background:var(--ink);color:var(--bg)}
+/* 場所の追加ボタン（右下） */
+.fab{height:48px;padding:0 18px;background:var(--prim-bg);color:var(--prim-fg);border:1px solid var(--prim-bd);font:700 14px var(--body)}
+.fab b{font-size:18px}
+/* 行きたい場所のリスト：［チェック｜名前＋メタ｜操作］ */
+.spots{gap:0;border-top:1px solid var(--line)}
+.card.spot{display:grid;grid-template-columns:52px 1fr auto;gap:0;padding:0;align-items:stretch;border:0;border-bottom:1px solid var(--line);min-height:64px}
+.card.spot::before{display:none}
+.spot .body{padding:8px 10px;justify-content:center;border-left:1px solid var(--line)}
+.spot .nm{font:600 19px/1.2 var(--display)}
+.spot .stars{font-size:11px;color:var(--atext);letter-spacing:.04em}
+.spot .ops{border-left:1px solid var(--line);padding:6px 12px;align-items:stretch;justify-content:center;gap:2px;text-align:center;min-width:56px}
+.spot .ops a,.spot .ops .link{font-size:12px;font-weight:700;text-decoration:none;padding:3px 0}
+.chk,.bchk{-webkit-appearance:none;appearance:none;width:52px;height:auto;min-height:64px;margin:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;accent-color:initial}
+.chk::before,.bchk::before{content:"";width:22px;height:22px;border:1.5px solid var(--ink);display:grid;place-items:center;font-size:14px;line-height:1;color:var(--sel-fg)}
+.chk:checked::before,.bchk:checked::before{content:"✓";background:var(--sel-bg);border-color:var(--sel-bg)}
+.chk:focus-visible,.bchk:focus-visible{outline-offset:-2px}
+.spot.bsel{background:var(--accent-soft);border-color:var(--line)}
+.areah{font:600 15px var(--display);letter-spacing:.06em;padding:10px 12px 4px;margin:0;background:transparent;border-bottom:1px solid var(--line)}
+.empty{border:1px dashed var(--line)}
+.todo{border:1px dashed var(--star)}
+/* 窓：スマホは下から、PC は中央の幅480 */
+.sheet{align-items:flex-end;padding:0}
+.sheet-bg{background:var(--veil)}
+.sheet-body{max-width:none;max-height:86dvh;background:var(--bg);border:0;border-top:1px solid var(--ink);padding:0;gap:0}
+.sheet-body>.row:first-child{position:sticky;top:0;margin:0;padding:0;gap:0;border-bottom:1px solid var(--ink);background:var(--bg);flex-wrap:nowrap}
+.sheet-body>.row:first-child #ms-title{flex:1;padding:12px 16px;font:600 22px var(--display)}
+.sheet-body>.row:first-child #ms-close{align-self:stretch;min-width:72px;min-height:48px;background:transparent;color:var(--ink);border:0;border-left:1px solid var(--line);font-size:13px}
+.sheet-body>.note{padding:8px 16px 0}
+#ms-box{padding:12px 16px 16px;display:grid;gap:12px;overflow:auto}
+#ms-box .stack,#ms-box>.stack{gap:10px}
+/* メニュー：右から出る幅290の引き出し */
+.menu-bg{background:var(--veil)}
+.menu-panel{top:0;right:0;bottom:0;width:min(290px,86vw);max-height:none;padding:0;gap:0;background:var(--bg);border-left:1px solid var(--ink);counter-reset:m}
+.menu-panel::before{content:"メニュー";display:block;padding:14px 16px;font:600 22px var(--display);border-bottom:1px solid var(--ink)}
+.menu-panel button{padding:14px 16px;font-size:14px;border-bottom:1px solid var(--line);justify-content:flex-start;gap:10px}
+.menu-panel button::before{counter-increment:m;content:counter(m,decimal-leading-zero);flex:none;width:26px;font:600 12px var(--display);letter-spacing:.12em;opacity:.7}
+.menu-panel button span:first-child{flex:1;text-align:left}
+.menu-panel button:active,.menu-panel button.cur{background:var(--accent-soft)}
+.menu-panel .cnt{font:600 14px var(--display);color:var(--ink)}
+.menu-panel hr{display:none}
+/* 距離マップ */
+.mp{border:1px solid var(--ink);background:var(--bg)}
+.mp .ring{stroke:var(--accent)}
+.mp text{stroke:var(--bg)}
+/* 保存したルートなど */
+details.rt{border:1px solid var(--line);background:transparent}
+pre.prompt{background:transparent;border:1px solid var(--line)}
+/* PC幅：左に幅232のサイドナビ、本文は2カラム */
+@media (min-width:1000px){
+  .wrap{max-width:none;margin-left:232px;padding-inline:24px;padding-bottom:120px}
+  .wrap>*{max-width:960px;width:100%}
+  .wrap>.topbar,.wrap>.subbar{max-width:none;width:auto}
+  .topbar,.subbar{margin-inline:-24px}
+  .topbar .menubtn,.subbar .menubtn{display:none}
+  .menu{inset:0 auto 0 0;width:232px;pointer-events:none;z-index:36}
+  .menu-bg{display:none}
+  .menu-panel{pointer-events:auto;width:232px;border-left:0;border-right:1px solid var(--ink)}
+  .dock .in{max-width:960px;margin:0 0 0 232px}
+  .dock{padding-left:24px}
+  .fab{right:24px}
+  #main-sec{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  #main-sec>*{min-width:0}
+  #main-sec>#qa-card,#main-sec>#board-card,#main-sec>#steps,#main-sec>#trip-card,#main-sec>#spots-head,#main-sec>#spots,#main-sec>#spots-note{grid-column:1/-1}
+}
 </style>
 </head>
 <body data-view="main">
@@ -360,7 +578,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   <section class="stack" aria-labelledby="h-spots" id="main-sec">
     <nav class="steps only-plan vmain" id="steps" aria-label="進めかた"></nav>
     <section class="card stack qa only-plan vmain" id="qa-card" aria-labelledby="h-qa">
-      <h2 id="h-qa" style="font-size:17px">1　行きたい場所を集める</h2>
+      <h2 id="h-qa">行きたい場所を集める</h2>
       <p class="note" style="margin:0">Googleマップで場所を開き、「共有」でコピーしたリンクを貼るだけ。名前や住所は自動で入ります。まとめて入れたいときは、1つずつ続けて貼ってください。</p>
       <div class="row" style="flex-wrap:nowrap">
         <input id="qa-url" placeholder="リンクか名前を貼る" aria-label="Googleマップのリンクか場所の名前" style="flex:1;min-width:0" inputmode="url">
@@ -432,7 +650,7 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
       </div>
     </details>
     <section class="card stack only-plan vmain" id="board-card" aria-labelledby="h-board">
-      <h2 id="h-board" style="font-size:17px">2　日ごとに割りふる <span class="note" id="board-sum"></span></h2>
+      <h2 id="h-board">日ごとに割りふる <span class="note" id="board-sum"></span></h2>
       <div class="grid" id="dates-box">
         <label>旅の開始日<input type="date" id="plan-start"></label>
         <label>旅の終了日<input type="date" id="plan-end"></label>
@@ -1227,7 +1445,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   const stayText = m => !m ? "" : m >= 60 ? `${m/60}時間` : `${m}分`;
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
-  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); }
+  var menuReady = false; // サイドナビ（PC幅）の件数を、いつも最新にするため。はじめの組み立てが終わるまでは触らない
+  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); if (menuReady && WIDE.matches) openMenu(); }
   // まとめて選んで、エリアを変える
   let bulkMode = true; const bulkSel = new Set();
   function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; const bar = $("bulk-bar"); if (bar) { const was = bar.hidden; bar.hidden = n === 0; if (was && n > 0) renderBulkChips(); } }
@@ -2546,13 +2765,13 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     items.filter(p => p.kind === "spot").forEach(p => {
       const x = X(p), y = Y(p); if (x < -20 || x > 380 || y < -20 || y > 380) return;
       mapLayout.push({ id: p.id, x, y });
-      svg.append(sv("circle", { cx: x, cy: y, r: p.id === mapSel ? 8 : 6, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}${inRadius(p, ad) ? "" : " far"}` }));
+      { const hr = p.id === mapSel ? 7 : 5; svg.append(sv("rect", { x: x - hr, y: y - hr, width: hr * 2, height: hr * 2, class: `p${p.prio}${p.id === mapSel ? " sel" : ""}${inRadius(p, ad) ? "" : " far"}` })); } // 場所は小さな四角（優先度は塗りの濃さ）
       if (!many || p.prio === 3 || p.id === mapSel || mapView.z >= 3) place(x, y, p.name.length > 9 ? p.name.slice(0, 9) + "…" : p.name);
       svg.append(sv("circle", { cx: x, cy: y, r: 16, class: "hit" }));
     });
     items.filter(p => p.kind === "base").forEach(p => { const x = X(p), y = Y(p); svg.append(sv("rect", { x: x - 7, y: y - 7, width: 14, height: 14, rx: 2, class: "base" })); place(x, y - 10, p.label); });
     const lgi = (cls, t) => { const sp = el("span"); sp.append(el("i", cls)); sp.append(document.createTextNode(t)); lg.append(sp); };
-    lgi("sq", "拠点"); [3, 2, 1].forEach(n => { const sp = el("span"); const i = el("i"); i.style.background = n === 3 ? "var(--star)" : n === 2 ? "var(--accent)" : "var(--muted)"; sp.append(i, document.createTextNode("★".repeat(n))); lg.append(sp); });
+    lgi("sq", "拠点"); [3, 2, 1].forEach(n => { const sp = el("span"); const i = el("i"); i.style.background = n === 3 ? "var(--accent-700)" : n === 2 ? "var(--accent-400)" : "var(--bg)"; i.style.border = "1px solid var(--ink)"; sp.append(i, document.createTextNode("★".repeat(n))); lg.append(sp); });
     lg.querySelector("i.sq").style.background = "var(--ink)";
     const outN = fb ? spots.filter(p => { const x = X(p), y = Y(p); return x < -20 || x > 380 || y < -20 || y > 380; }).length : 0;
     $("map-info").textContent = selSpot ? `${selSpot.name}（${"★".repeat(selSpot.prio)}）：${distText(selSpot, ad) || "拠点が未登録です"}（直線距離）` : (bases[0] ? `輪は${fb ? fb.k + "の" : ""}拠点からの直線距離（いまは${lab(step)}ごと）。点をタップすると名前と距離が出ます。${outN ? `図の外の${outN}か所は「全体」か縮小で見られます。` : ""}` : "拠点が未登録なので、行きたい場所の中心を基準にしています。「日程と拠点」で拠点を入れてください。");
@@ -3009,7 +3228,9 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
     else { history.replaceState({ d: 0 }, "", fallback && fallback !== "main" ? "#" + fallback : homeUrl()); applyView(); }
   }
   window.addEventListener("popstate", applyView); window.addEventListener("hashchange", applyView);
-  function closeMenu(){ $("menu").hidden = true; }
+  // PC幅（1000px以上）では、メニューは左のサイドナビとして、いつも出しておく
+  const WIDE = matchMedia("(min-width:1000px)");
+  function closeMenu(){ if (WIDE.matches) { openMenu(); return; } $("menu").hidden = true; }
   function openMenu(){
     const p = $("menu-panel"), v = curView(); p.textContent = "";
     const item = (to, text, cnt) => { const b = el("button"); b.type = "button"; b.dataset.go = to; if (v === to) b.className = "cur"; b.append(el("span", null, text)); if (cnt != null) b.append(el("span", "cnt", cnt)); b.onclick = () => { closeMenu(); go(to); }; p.append(b); };
@@ -3029,6 +3250,8 @@ pre.prompt{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);f
   $("menu-bg").onclick = closeMenu;
   $("sub-back").onclick = () => goBack("main");
   applyView();
+  menuReady = true; if (WIDE.matches) openMenu();
+  WIDE.addEventListener("change", () => { if (WIDE.matches) openMenu(); else $("menu").hidden = true; });
   // ?add=（Googleマップのリンクなど）で開くと、そのまま登録する（iPhoneの「ショートカット」から使う）
   { const q = new URLSearchParams(location.search).get("add");
     if (q) { stripParams("add"); $("qa-url").value = q; quickAdd(); } }
