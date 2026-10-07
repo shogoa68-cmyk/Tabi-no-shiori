@@ -295,6 +295,8 @@ h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:-.01em}
 h2{font-size:21px}
 .eyebrow{font-size:10px;letter-spacing:.14em;font-weight:500}
 .wrap{gap:16px;padding-top:0}
+/* 説明文（HTMLに書いてある長い案内）は出さない。もどすときは、次の1行を消す */
+.expl{display:none!important}
 /* 角の「＋」マーク（カード・場所カード・金額・天気・レンタカー） */
 .card,#board .dz .dchip:not(.fr),.wxcard,.daycost,.rentcard{position:relative}
 .card::before,#board .dz .dchip:not(.fr)::before,.wxcard::before,.daycost::before,.rentcard::before{content:"";position:absolute;inset:-6px;pointer-events:none;--c:color-mix(in srgb,var(--ink) 55%,transparent);
@@ -579,7 +581,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     <nav class="steps only-plan vmain" id="steps" aria-label="進めかた"></nav>
     <section class="card stack qa only-plan vmain" id="qa-card" aria-labelledby="h-qa">
       <h2 id="h-qa">行きたい場所を集める</h2>
-      <p class="note" style="margin:0">Googleマップで場所を開き、「共有」でコピーしたリンクを貼るだけ。名前や住所は自動で入ります。まとめて入れたいときは、1つずつ続けて貼ってください。</p>
+      <p class="note expl" style="margin:0">Googleマップで場所を開き、「共有」でコピーしたリンクを貼るだけ。名前や住所は自動で入ります。まとめて入れたいときは、1つずつ続けて貼ってください。</p>
       <div class="row" style="flex-wrap:nowrap">
         <input id="qa-url" placeholder="リンクか名前を貼る" aria-label="Googleマップのリンクか場所の名前" style="flex:1;min-width:0" inputmode="url">
         <button class="btn" type="button" id="qa-add">追加</button>
@@ -593,7 +595,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       <details class="qa-help">
         <summary>共有メニューから、もっと手間なく追加する方法（ショートカット）</summary>
         <div class="stack" style="gap:6px;margin-top:6px">
-          <p class="note" style="margin:0">iPhoneの「ショートカット」アプリで、1回だけ設定します。そのあとは、Googleマップの「共有」→「旅ナビに追加」を押すだけで、登録されます。</p>
+          <p class="note expl" style="margin:0">iPhoneの「ショートカット」アプリで、1回だけ設定します。そのあとは、Googleマップの「共有」→「旅ナビに追加」を押すだけで、登録されます。</p>
           <ol class="note" style="margin:0;padding-left:20px">
             <li>「ショートカット」アプリを開き、右上の「＋」を押す。</li>
             <li>「アクションを追加」で「URLをエンコード」（URLエンコード）を探して追加する。入力は「ショートカットの入力」にする。</li>
@@ -603,7 +605,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
           </ol>
           <label>URLに入れるアドレス<input id="qa-tpl" readonly aria-label="ショートカットに入れるアドレス"></label>
           <button class="btn ghost small" type="button" id="qa-tpl-copy" style="align-self:flex-start">アドレスをコピー</button>
-          <p class="note" style="margin:0">注意：この方法は、Safariで旅ナビが開きます。ホーム画面のアプリとは、データが別々です。Googleでログインしておくと、同じリストが出ます。</p>
+          <p class="note expl" style="margin:0">注意：この方法は、Safariで旅ナビが開きます。ホーム画面のアプリとは、データが別々です。Googleでログインしておくと、同じリストが出ます。</p>
         </div>
       </details>
     </section>
@@ -630,7 +632,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       <div class="stack" id="trip-invite-box" hidden style="gap:6px">
         <input id="invite-url" readonly aria-label="招待リンク">
         <div class="row"><button class="btn small" type="button" id="invite-copy">コピー</button><button class="btn ghost small" type="button" id="invite-share" hidden>LINEなどで送る</button></div>
-        <p class="note">このリンクは7日間だけ使えて、使えるのは1回だけです。招待したい人ごとに作ってください。リンクを開いた人はGoogleでログインして参加します。</p>
+        <p class="note expl">このリンクは7日間だけ使えて、使えるのは1回だけです。招待したい人ごとに作ってください。リンクを開いた人はGoogleでログインして参加します。</p>
       </div>
       <div class="stack" id="trip-members" hidden style="gap:4px"></div>
       <p class="note" id="trip-note"></p>
@@ -638,7 +640,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     <details class="card" id="plan-card" data-v="days">
       <summary>3　日ごとの詳細（拠点・外せない移動・食事） <span class="note" id="plan-sum"></span></summary>
       <div class="stack">
-        <p class="note">日ごとに、拠点（宿・駅・空港など）、絶対に外せない移動（新幹線・飛行機）、食事の希望を、わかるところから入れます。旅の日付は「2　日ごとに割りふる」の中で入れます。朝と夜で拠点が別のときは、両方入れてください。入れなかった日は、前の日の夜の拠点（なければ朝の拠点）と同じになります。</p>
+        <p class="note expl">日ごとに、拠点（宿・駅・空港など）、絶対に外せない移動（新幹線・飛行機）、食事の希望を、わかるところから入れます。旅の日付は「2　日ごとに割りふる」の中で入れます。朝と夜で拠点が別のときは、両方入れてください。入れなかった日は、前の日の夜の拠点（なければ朝の拠点）と同じになります。</p>
         <label>ルートの提案に使う日<select id="day-select"></select></label>
         <div class="stack" id="plan-days"></div>
         <div class="row">
@@ -655,13 +657,13 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
         <label>旅の開始日<input type="date" id="plan-start"></label>
         <label>旅の終了日<input type="date" id="plan-end"></label>
       </div>
-      <p class="note" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）や、朝食・昼食・夕食の行へ動かして入れます（食事の行へ入れると、その場所が食事の場所になります）。入れたカードも、点々をつかんで動かせます。「コンパクト／くわしく」で、リストの見た目を切りかえられます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
+      <p class="note expl" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）や、朝食・昼食・夕食の行へ動かして入れます（食事の行へ入れると、その場所が食事の場所になります）。入れたカードも、点々をつかんで動かせます。「コンパクト／くわしく」で、リストの見た目を切りかえられます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
       <div id="board"></div>
     </section>
     <details class="card" id="hub-card" data-v="hubs">
       <summary>交通の拠点（駅・バス停など） <span class="note" id="hub-sum"></span></summary>
       <div class="stack">
-        <p class="note">ルートを考えてもらうときに使う、駅・バス停・空港・港を登録します。お願い文に入るので、Claudeが「この駅から乗る」「この駅で降りる」を考えて、ルートを組めます。自動で探せるのは駅とバス停です（空港・港は手で登録してください）。</p>
+        <p class="note expl">ルートを考えてもらうときに使う、駅・バス停・空港・港を登録します。お願い文に入るので、Claudeが「この駅から乗る」「この駅で降りる」を考えて、ルートを組めます。自動で探せるのは駅とバス停です（空港・港は手で登録してください）。</p>
         <div class="stack" id="hub-list"></div>
         <div class="stack" style="gap:6px;border-top:1px solid var(--line);padding-top:10px">
           <span class="note" style="color:var(--ink);font-weight:700">行きたい場所から、駅・バス停を提案してもらう</span>
@@ -692,7 +694,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
         </div>
       </div>
     </details>
-    <p class="note only-plan" data-v="spots" id="spots-note" style="margin:0">営業時間・滞在時間・メモなどの詳細は、あとで「編集」から入れられます。まだ入っていない項目は、カードに印が出ます。</p>
+    <p class="note expl only-plan" data-v="spots" id="spots-note" style="margin:0">営業時間・滞在時間・メモなどの詳細は、あとで「編集」から入れられます。まだ入っていない項目は、カードに印が出ます。</p>
     <div class="spots" id="spots" data-v="spots"></div>
     <div class="bulkbar" id="bulk-bar" data-v="spots" hidden>
       <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b id="bulk-count">0か所を選んでいます</b><span class="row" style="gap:10px"><button class="link" type="button" id="bulk-all">ぜんぶ選ぶ</button><button class="link" type="button" id="bulk-none">解除</button></span></div>
@@ -758,7 +760,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
         <button class="btn ghost small" type="button" id="map-zreset">全体</button>
         <span class="note" id="map-zlabel"></span>
       </div>
-      <p class="note">2本の指でひらく・とじる（ピンチ）か、ボタンで拡大・縮小できます。拡大したあとは、指でなぞって動かせます（パソコンは、Ctrlを押しながらホイールでも拡大・縮小できます）。</p>
+      <p class="note expl">2本の指でひらく・とじる（ピンチ）か、ボタンで拡大・縮小できます。拡大したあとは、指でなぞって動かせます（パソコンは、Ctrlを押しながらホイールでも拡大・縮小できます）。</p>
       <div id="map-box"></div>
       <div class="legend" id="map-legend"></div>
       <p class="note" id="map-info" style="color:var(--ink)"></p>
@@ -770,7 +772,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   <details class="card" id="routes-card" data-v="routes" hidden>
     <summary>保存したルート <span class="note" id="routes-count"></span></summary>
     <div class="stack">
-      <p class="note">Claudeが返したルートを貼り付けて保存すると、この旅のメンバーみんなで見られます。</p>
+      <p class="note expl">Claudeが返したルートを貼り付けて保存すると、この旅のメンバーみんなで見られます。</p>
       <label>題名（例：1日目）<input id="route-title" maxlength="60"></label>
       <label>Claudeの返事<textarea id="route-body" maxlength="20000" style="min-height:120px" placeholder="Claudeの返事をコピーして、ここに貼り付け"></textarea></label>
       <div class="row"><button class="btn small" type="button" id="route-save">保存する</button><span class="msg" id="route-msg"></span></div>
@@ -846,7 +848,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   <div class="sheet-bg" id="ms-bg"></div>
   <div class="sheet-body">
     <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b id="ms-title" style="font-family:var(--display)"></b><button class="btn small" type="button" id="ms-close">閉じる</button></div>
-    <p class="note" style="margin:0">入れた内容は、その場で保存されます。</p>
+    <p class="note expl" style="margin:0">入れた内容は、その場で保存されます。</p>
     <div id="ms-box"></div>
   </div>
 </div>
