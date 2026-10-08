@@ -176,6 +176,11 @@ body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!impor
 #board-tray .dchip{flex:none;width:150px;touch-action:pan-x;align-items:stretch;font-size:13px}
 #board-tray .tctl{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end}
 #board-tray .th{flex-wrap:nowrap}
+#board-tray .trsort{min-height:0;height:24px;line-height:20px;padding:0 8px;font-size:12px;white-space:nowrap;flex:none}
+.refd{display:block;font-size:11px;color:var(--atext);font-weight:700;line-height:1.35;margin-top:2px;white-space:normal}
+.ridecard{border-left:3px solid var(--accent-700)}
+#board-tray .tview button{white-space:nowrap}
+@media (max-width:430px){#board-tray .th>b{display:none}#board-tray .th{justify-content:flex-end}}
 #board-tray .th>b{font-family:var(--display);font-size:13px;color:var(--ink);white-space:nowrap}
 #board-tray .tview{display:inline-flex;border:1.5px solid var(--line);border-radius:99px;overflow:hidden}
 #board-tray .tview button{font:inherit;font-size:12px;font-weight:700;border:0;background:transparent;color:var(--muted);padding:3px 9px;cursor:pointer}
@@ -1753,7 +1758,15 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     });
     return out.sort((a, b) => a.pk.localeCompare(b.pk));
   }
-  const rentalLine = (r, pk) => [r.company, r.car, `受け取り ${[r.pickPlace, r.pickTime].filter(Boolean).join(" ") || "未入力"}`, `返却 ${[r.retDate && r.retDate !== pk ? md(r.retDate) : "", r.retPlace || (r.pickPlace ? "（受け取りと同じ）" : ""), r.retTime].filter(Boolean).join(" ") || "未入力"}`, costOf(r) ? "約" + yenIf(r) : "", r.resno ? "予約番号 " + r.resno : "", r.memo].filter(Boolean).join("／");
+  const RENT_KINDS = ["レンタカー", "レンタサイクル"], RIDE_KINDS = ["タクシー", "バス", "フェリー", "その他"];
+  const rentKind = r => (r && r.kind === "レンタサイクル") ? "レンタサイクル" : "レンタカー";
+  // 借りている間は、移動時間の目安を「車」「自転車」で計算する（「移動手段」の設定より優先）
+  let travelOverride = null;
+  const dayMode = k => { const x = rentalsFor(k)[0]; return x ? (rentKind(x.r) === "レンタサイクル" ? "レンタサイクル" : "車") : null; };
+  // 1区間の足（タクシー・バス・フェリー…）：`plan.days[日付].rides = [{ id, kind, from, to, fromLat?, fromLng?, toLat?, toLng?, time?, cost?, memo? }]`
+  const ridesOf = k => { const a = (state.plan.days[k] || {}).rides; return Array.isArray(a) ? a.filter(x => x && (x.from || x.to)) : []; };
+  const rideText = x => `${x.time ? x.time + "ごろ　" : ""}${x.from || "?"}→${x.to || "?"}（${x.kind || "移動"}）${costOf(x) ? "　約" + yenIf(x) : ""}${x.memo ? "　" + x.memo : ""}`;
+  const rentalLine = (r, pk) => [rentKind(r) === "レンタカー" ? "" : "レンタサイクル", r.company, r.car, `受け取り ${[r.pickPlace, r.pickTime].filter(Boolean).join(" ") || "未入力"}`, `返却 ${[r.retDate && r.retDate !== pk ? md(r.retDate) : "", r.retPlace || (r.pickPlace ? "（受け取りと同じ）" : ""), r.retTime].filter(Boolean).join(" ") || "未入力"}`, costOf(r) ? "約" + yenIf(r) : "", r.resno ? "予約番号 " + r.resno : "", r.memo].filter(Boolean).join("／");
   // ---- 天気予報（Open-Meteo。16日先まで。日ごとの「朝の拠点」「夜の拠点」の位置（なければ、その日の最初の場所）の予報を、自動で取る） ----
   // 送るのは、位置を0.1度（約10km）にまるめた緯度・経度だけ。結果は手元に3時間ためる（localStorage `tabi-navi-wx`）
   const WX_KEY = "tabi-navi-wx", WX_TTL = 3 * 3600e3, WX_RETRY = 10 * 60e3, WX_DAYS = 16;
@@ -1825,10 +1838,10 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const meal = ["b", "l", "d"].reduce((a, key) => a + costOf(mealsOf(k)[key]), 0);
     const move = movesOf(k).reduce((a, m) => a + costOf(m), 0);
     const stay = hasBase(d.pm) ? costOf(d.pm) : 0;
-    const rental = costOf(rentalOf(k)); // 受け取りの日に数える
+    const rental = costOf(rentalOf(k)) + ridesOf(k).reduce((a, x) => a + costOf(x), 0); // 借りる足は受け取りの日に数える。1区間の足もここ
     return { spot, meal, move, stay, rental, total: spot + meal + move + stay + rental };
   }
-  const costParts = c => [["場所", c.spot], ["食事", c.meal], ["移動", c.move], ["レンタカー", c.rental], ["宿泊", c.stay]].filter(x => x[1]).map(x => `${x[0]} ${yen(x[1])}`).join("・");
+  const costParts = c => [["場所", c.spot], ["食事", c.meal], ["移動", c.move], ["現地の足", c.rental], ["宿泊", c.stay]].filter(x => x[1]).map(x => `${x[0]} ${yen(x[1])}`).join("・");
   // ---- 絶対に外せない移動（新幹線・飛行機など。拠点より上の決まりごと。日ごと plan.days[日付].moves に入れ、日程といっしょに同期する） ----
   const MOVE_KINDS = ["新幹線", "飛行機", "特急・電車", "フェリー", "高速バス", "その他移動手段"];
   // 種類ごとの絵文字（画面に出すだけ。保存するのは種類の名前だけ。お願い文には入れない）。ふるい「その他」も読める
@@ -1865,7 +1878,8 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     if (Array.isArray(day.moves) && !day.moves.length) delete day.moves;
     if (day.slots) { Object.keys(day.slots).forEach(n => { if (!Array.isArray(day.slots[n]) || !day.slots[n].length) delete day.slots[n]; }); if (!Object.keys(day.slots).length) delete day.slots; }
     if (day.rental && !rentalOf(k)) delete day.rental;
-    if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots && !day.area && !day.rental) delete state.plan.days[k];
+    if (Array.isArray(day.rides) && !ridesOf(k).length) delete day.rides;
+    if (!day.am && !day.pm && !day.meals && !day.moves && !day.slots && !day.area && !day.rental && !day.rides) delete state.plan.days[k];
   }
   // その日の「エリア」の入力欄（日ごとの詳細と、日ごとの画面の窓の両方で使う）。複数のエリアを選べる
   function areaBox(k){
@@ -1938,13 +1952,15 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     return form;
   }
   // レンタカーの入力窓（受け取りの日に1件）
-  function rentalForm(k, done){
+  function rentalForm(k, done, opts){
     const cur = (state.plan.days[k] || {}).rental || {};
     const form = el("div", "stack"); form.style.gap = "6px"; form.dataset.rentalForm = k;
     const F = {};
+    const kindSel = el("select"); kindSel.className = "rt-kind"; kindSel.setAttribute("aria-label", "借りるもの"); RENT_KINDS.forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = t; kindSel.append(o); });
+    kindSel.value = opts && opts.kind ? opts.kind : rentKind(cur); { const kl = el("label", null, "借りるもの"); kl.append(kindSel); form.append(kl); }
     const add = (key, label, max, ph, type) => { const i = mkInput("rt-" + key, label, max); if (type) i.type = type; if (ph) i.placeholder = ph; i.value = cur[key] || ""; F[key] = i; const l = el("label", null, label); l.append(i); form.append(l); };
-    add("company", "レンタカー会社・店舗名", 40, "例：トヨタレンタカー 越後湯沢駅前店");
-    add("car", "車種・クラス（わかれば）", 30, "例：コンパクト（スタッドレス）");
+    add("company", "会社・店舗名", 40, "例：トヨタレンタカー 越後湯沢駅前店");
+    add("car", "車種・クラス（わかれば）", 30, "例：コンパクト（スタッドレス）／電動アシスト");
     add("resno", "予約番号", 30, "あれば");
     add("tel", "店舗の電話番号", 20, "例：025-785-1234");
     add("pickPlace", "受け取る場所", 60, "例：越後湯沢駅前店");
@@ -1955,20 +1971,83 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const costL = costField("料金（円。わかれば）", cur.cost, n => { cost = n || 0; }); let cost = costOf(cur); form.append(costL);
     add("memo", "メモ（保険・免責・ETC・給油ルールなど）", 80, "例：満タン返し。ETCカード借りる");
     const msg = el("span", "msg");
-    const save = el("button", "btn small", rentalOf(k) ? "保存する" : "このレンタカーを追加"); save.type = "button"; save.style.alignSelf = "flex-start";
+    const save = el("button", "btn small", rentalOf(k) ? "保存する" : "これを追加"); save.type = "button"; save.style.alignSelf = "flex-start";
     save.onclick = () => {
       const v = {}; Object.keys(F).forEach(key => { const t = F[key].value.trim(); if (t) v[key] = t; }); if (cost) v.cost = cost;
+      if (kindSel.value !== "レンタカー") v.kind = kindSel.value;
+      ["pick", "ret"].forEach(w => { if (cur[w + "Place"] && cur[w + "Place"] === v[w + "Place"] && Number.isFinite(cur[w + "Lat"])) { v[w + "Lat"] = cur[w + "Lat"]; v[w + "Lng"] = cur[w + "Lng"]; } }); // 場所を変えていなければ、位置は残す
       if (!v.company && !v.pickPlace && !v.car) { msg.textContent = "会社名か受け取る場所を入れてください"; return; }
       if (v.retDate && v.retDate < k) { msg.textContent = "返却日は、受け取りの日より後にしてください"; return; }
       if (v.retDate === k) delete v.retDate;
       const d = state.plan.days[k] = state.plan.days[k] || {}; d.rental = v;
-      changePlan(); if (done) done(); else renderPlan();
+      changePlan(); locateRental(k); if (done) done(); else renderPlan();
     };
     form.append(save);
-    if (rentalOf(k)) { const del = el("button", "link", "このレンタカーを削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
-      del.onclick = () => { if (!confirm("このレンタカーの情報を削除しますか？")) return; const d = state.plan.days[k]; delete d.rental; pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
+    if (rentalOf(k)) { const del = el("button", "link", "これを削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
+      del.onclick = () => { if (!confirm("この情報を削除しますか？")) return; const d = state.plan.days[k]; delete d.rental; pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
     form.append(msg);
     return form;
+  }
+  // 借りる足の受け取り・返却の場所の位置（`pickLat/pickLng`・`retLat/retLng`）を、裏で調べる
+  const rentEnd = (r, w) => { const o = { name: r[w + "Place"] || "", lat: r[w + "Lat"], lng: r[w + "Lng"] }; return hasPos(o) ? o : null; };
+  async function locateRental(k){
+    const r0 = rentalOf(k); if (!r0) return;
+    for (const w of ["pick", "ret"]) {
+      const nm = r0[w + "Place"]; if (!nm || rentEnd(r0, w)) continue;
+      const g = await geocode({ name: nm });
+      const r = rentalOf(k); if (!r || r[w + "Place"] !== nm || rentEnd(r, w)) continue;
+      if (g) { r[w + "Lat"] = g.lat; r[w + "Lng"] = g.lng; changePlan(); }
+    }
+  }
+  const rideEnd = (x, w) => { const o = { name: x[w] || "", lat: x[w + "Lat"], lng: x[w + "Lng"] }; return hasPos(o) ? o : null; };
+  async function locateRide(k, id){
+    const x0 = ridesOf(k).find(x => x.id === id); if (!x0) return;
+    for (const w of ["from", "to"]) {
+      if (!x0[w] || rideEnd(x0, w)) continue;
+      const g = await geocode({ name: x0[w] });
+      const x = ridesOf(k).find(y => y.id === id); if (!x || x[w] !== x0[w] || rideEnd(x, w)) continue;
+      if (g) { x[w + "Lat"] = g.lat; x[w + "Lng"] = g.lng; changePlan(); }
+    }
+  }
+  // 1区間の足（タクシー・バス・フェリー…）の入力窓。x があれば編集
+  function rideForm(k, x, done, kind0){
+    const form = el("div", "stack"); form.style.gap = "6px"; form.dataset.rideForm = k;
+    const kind = el("select"); kind.className = "rd-kind"; kind.setAttribute("aria-label", "足の種類"); RIDE_KINDS.forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = t; kind.append(o); });
+    kind.value = x && x.kind ? x.kind : kind0 || RIDE_KINDS[0];
+    const kl = el("label", null, "種類"); kl.append(kind);
+    const from = mkInput("rd-from", "のる場所", 40); from.placeholder = "のる場所（例：新潟駅）"; from.value = x ? x.from || "" : "";
+    const to = mkInput("rd-to", "おりる場所", 40); to.placeholder = "おりる場所（例：古町）"; to.value = x ? x.to || "" : "";
+    const time = mkInput("rd-time", "のる時刻（わかれば）", 5); time.type = "time"; time.value = x ? x.time || "" : "";
+    const tl = el("label", null, "のる時刻（わかれば）"); tl.append(time);
+    const memo = mkInput("rd-memo", "メモ", 60); memo.placeholder = "メモ（予約・乗り場・便の名前など）"; memo.value = x ? x.memo || "" : "";
+    let cost = x ? costOf(x) : 0; const costL = costField("金額（円。わかれば）", cost, n => { cost = n || 0; });
+    const msg = el("span", "msg"); const save = el("button", "btn small", x ? "保存する" : "これを追加"); save.type = "button"; save.style.alignSelf = "flex-start";
+    save.onclick = () => {
+      if (!from.value.trim() || !to.value.trim()) { msg.textContent = "のる場所とおりる場所を入れてください"; return; }
+      const d = state.plan.days[k] = state.plan.days[k] || {}; d.rides = Array.isArray(d.rides) ? d.rides : [];
+      const v = { kind: kind.value, from: from.value.trim(), to: to.value.trim() };
+      if (time.value) v.time = time.value; if (cost) v.cost = cost; if (memo.value.trim()) v.memo = memo.value.trim();
+      let id = x && x.id;
+      const old = id && d.rides.find(y => y.id === id);
+      if (old) { ["from", "to"].forEach(w => { if (old[w] === v[w] && Number.isFinite(old[w + "Lat"])) { v[w + "Lat"] = old[w + "Lat"]; v[w + "Lng"] = old[w + "Lng"]; } }); Object.keys(old).forEach(key => delete old[key]); Object.assign(old, { id }, v); }
+      else { id = newId(); d.rides.push(Object.assign({ id }, v)); }
+      changePlan(); locateRide(k, id); if (done) done(); else renderPlan();
+    };
+    form.append(kl, ...[from, to].map(i => { const l = el("label", null, i === from ? "のる場所" : "おりる場所"); l.append(i); return l; }), tl, costL, (() => { const l = el("label", null, "メモ"); l.append(memo); return l; })(), save);
+    if (x) { const del = el("button", "link", "これを削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
+      del.onclick = () => { if (!confirm("この情報を削除しますか？")) return; const d = state.plan.days[k]; d.rides = d.rides.filter(y => y.id !== x.id); pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
+    form.append(msg);
+    return form;
+  }
+  // 「＋ 現地の足」：種類をえらぶ → 借りる足（レンタカー・レンタサイクル）か、1区間の足の入力へ
+  function localPicker(k, title){
+    const box = el("div", "stack"); box.style.gap = "8px"; box.dataset.localPicker = k;
+    const row = el("div", "row"); row.style.gap = "6px"; const body = el("div");
+    box.append(el("span", "note", "現地で使う足を選んでください。借りる足は1日目から返す日まで、1区間の足は「ここからここまで」の1回です。"), row, body);
+    const show = (kind, rent) => { body.textContent = ""; body.append(rent ? rentalForm(k, closeSheet, { kind }) : rideForm(k, null, closeSheet, kind)); [...row.children].forEach(b => b.setAttribute("aria-pressed", b.dataset.kind === kind ? "true" : "false")); };
+    [...RENT_KINDS.map(t => [t, true]), ...RIDE_KINDS.map(t => [t, false])].forEach(([t, rent]) => { const b = el("button", "pillbtn", t); b.type = "button"; b.dataset.kind = t; b.dataset.rent = rent ? "1" : "0"; b.setAttribute("aria-pressed", "false"); b.onclick = () => show(t, rent); row.append(b); });
+    if (rentalOf(k)) show(rentKind(rentalOf(k)), true);
+    return box;
   }
   function moveEditor(k){
     const wrap = el("div", "stack"); wrap.style.gap = "8px"; wrap.dataset.moves = k;
@@ -2086,7 +2165,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   }
   // 移動時間の目安：直線距離から、移動手段ごとの目安で出す（実際の道のり・待ち時間でかわる）
   function travel(a, b){
-    const d = km(a, b), mode = ($("mode") && $("mode").value) || "";
+    const d = km(a, b), mode = travelOverride || ($("mode") && $("mode").value) || "";
     let how, min;
     if (/徒歩のみ/.test(mode) || d <= 1) { how = "徒歩"; min = d * 1300 / 80; }
     else if (/^車|タクシー/.test(mode)) { how = "車"; min = d * 1.4 / 30 * 60 + 5; } // 「電車」の車に反応しないよう、先頭の「車」だけ見る
@@ -2184,6 +2263,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     if (opt.sub) nm.append(el("span", "sub", opt.sub));
     if (costOf(s)) nm.append(el("span", "sub cost", yenIf(s)));
     if (opt.tag) { nm.append(document.createElement("br")); nm.append(el("span", "tag", opt.tag)); }
+    if (opt.refs && opt.refs.length) { nm.append(document.createElement("br")); nm.append(el("span", "refd", opt.refs.slice(0, opt.refsN || 2).map(o => `${o.label} ${fmtKm(o.d)}`).join("・"))); }
     nm.append(mapLink(spotMapUrl(s), "Googleマップ")); // 登録したGoogleマップのリンク（なければ名前で検索）
     nm.style.cursor = "pointer"; nm.onclick = e => { if (e.target.closest && e.target.closest("a")) return; editSpotCard(s.id); }; // 名前のあたりをタップすると、詳細を編集できる
     if (opt.num) {
@@ -2194,6 +2274,19 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     if (opt.used) c.classList.add("used");
     return c;
   }
+  // 割りふりの基準点：その日の拠点・外せない移動の出発地と到着地・借りる足の受け取りと返却・1区間の足の始点と終点（位置が分かるものだけ）
+  function dayRefs(k){
+    const list = dayList(), i = list.indexOf(k); if (i < 0) return [];
+    const da = dayAt(list, i), out = [];
+    const add = (label, p) => { if (p && hasPos(p) && !out.some(o => km(o.p, p) < 0.1)) out.push({ label, p: { lat: p.lat, lng: p.lng } }); };
+    const same = hasPos(da.am) && hasPos(da.pm) && km(da.am, da.pm) < 0.1;
+    add(same ? "拠点" : "朝の拠点", da.am); add("夜の拠点", da.pm);
+    movesOf(k).forEach(m => { add(`${m.from}（出発）`, moveEnd(m, "from")); add(`${m.to}（到着）`, moveEnd(m, "to")); });
+    rentalsFor(k).forEach(({ r, role }) => { const rk = rentKind(r); if (role === "pick" || role === "same") add(`${rk}（受け取り）`, rentEnd(r, "pick")); if (role === "ret" || role === "same") add(`${rk}（返却）`, rentEnd(r, "ret") || rentEnd(r, "pick")); });
+    ridesOf(k).forEach(x => { add(`${x.from}（のる）`, rideEnd(x, "from")); add(`${x.to}（おりる）`, rideEnd(x, "to")); });
+    return out;
+  }
+  const nearRefs = (s, refs) => hasPos(s) ? refs.map(o => ({ label: o.label, d: km(s, o.p) })).sort((a, b) => a.d - b.d) : [];
   const showDay = k => {
     boardDay = k;
     document.querySelectorAll("#board .dayv").forEach(d => { d.hidden = d.dataset.date !== k; });
@@ -2210,13 +2303,17 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     lb.append(cb, document.createTextNode("未配置のみ"));
     const tv = el("span", "tview"); tv.setAttribute("role", "group"); tv.setAttribute("aria-label", "登録リストの表示");
     [["compact", "コンパクト"], ["detail", "くわしく"]].forEach(([v, t]) => { const b = el("button", null, t); b.type = "button"; b.dataset.tv = v; b.setAttribute("aria-pressed", (compact ? "compact" : "detail") === v ? "true" : "false"); b.onclick = () => { state.settings["tray-view"] = v; save(); renderBoard(); }; tv.append(b); });
-    const ctl = el("span", "tctl"); ctl.append(tv, lb); th.append(ctl);
+    const refs = dayRefs(boardDay), near = state.settings["tray-sort"] === "near" && refs.length > 0;
+    const sb = el("button", "pillbtn trsort", "近い順"); sb.type = "button"; sb.title = "基準点に近い順"; sb.setAttribute("aria-label", "基準点に近い順に並べる"); sb.setAttribute("aria-pressed", near ? "true" : "false"); sb.hidden = !refs.length;
+    sb.onclick = () => { state.settings["tray-sort"] = near ? "" : "near"; save(); renderBoard(); };
+    const ctl = el("span", "tctl"); ctl.append(tv, sb, lb); th.append(ctl);
     const strip = el("div", "strip");
     const ar = areaOfDay(boardDay), isAm = s => !!ar && areaMatch(s.area, ar);
     let shown = open.filter(s => !boardOnly || !whereIs(s.id));
     if (ar) shown = [...shown.filter(isAm), ...shown.filter(s => !isAm(s))]; // エリアが合うものを先に（それぞれの中は、もとの順）
+    if (near) { const dm = s => { const n = nearRefs(s, refs); return n.length ? n[0].d : Infinity; }; shown = shown.map((s, i) => [s, i]).sort((a, b) => dm(a[0]) - dm(b[0]) || a[1] - b[1]).map(x => x[0]); } // 基準点のどれかに近い順（位置が分からない場所は最後）
     if (!shown.length) strip.append(el("p", "note", open.length ? "すべて入れました。" : "行きたい場所がまだありません。"));
-    shown.forEach(s => { const w = whereIs(s.id); strip.append(chipFor(s, { tag: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : isAm(s) ? "エリア内" : "", sub: s.area || "" })); if (w) strip.lastChild.classList.add("used"); if (isAm(s)) strip.lastChild.classList.add("am"); });
+    shown.forEach(s => { const w = whereIs(s.id); strip.append(chipFor(s, { refs: nearRefs(s, refs), refsN: compact ? 1 : 2, tag: w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : isAm(s) ? "エリア内" : "", sub: s.area || "" })); if (w) strip.lastChild.classList.add("used"); if (isAm(s)) strip.lastChild.classList.add("am"); });
     tray.append(th, strip);
     if (ar) th.after(el("div", "areanote", `エリア「${ar}」の場所を先に並べています`));
     return tray;
@@ -2246,7 +2343,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     // 日ごとの画面
     const days = el("div");
     list.forEach((k, i) => {
-      const dv = el("div", "dayv"); dv.dataset.date = k; const da = dayAt(list, i), sch = daySchedule(k, da);
+      const dv = el("div", "dayv"); dv.dataset.date = k; const da = dayAt(list, i); travelOverride = dayMode(k); const sch = daySchedule(k, da);
       const dtext = dayLabel(k, i);
       const tmEl = (t, fixed, approx) => el("span", "tm" + (fixed ? " fx" : ""), t == null ? "" : fmtHM(t) + (approx ? "頃" : ""));
       const warnEls = ev => (ev.warns || []).map(w => el("div", "warn", "注意：" + w));
@@ -2263,14 +2360,14 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       const aex = el("button", "pillbtn exp", "この日をカレンダーへ"); aex.type = "button"; aex.dataset.date = k; aex.onclick = () => exportIcs([k]);
       const aar = el("button", "pillbtn areabtn", areaOfDay(k) ? `エリア：${areaOfDay(k)}` : "＋ エリアを入れる"); aar.type = "button"; aar.dataset.date = k;
       aar.onclick = () => openSheet(`${dtext}　エリア`, areaBox(k));
-      const rts = rentalsFor(k), arent = el("button", "pillbtn addrent", "＋ レンタカー"); arent.type = "button"; arent.dataset.date = k; arent.onclick = () => openSheet(`${dtext}　レンタカー`, rentalForm(k, closeSheet));
-      act.append(aar, amv, ...(rentalOf(k) ? [] : [arent]), aex); dv.append(act);
+      const rts = rentalsFor(k), arent = el("button", "pillbtn addrent", "＋ 現地の足"); arent.type = "button"; arent.dataset.date = k; arent.onclick = () => openSheet(`${dtext}　現地の足`, localPicker(k));
+      act.append(aar, amv, arent, aex); dv.append(act);
       { const wc = wxCard(k); if (wc) dv.append(wc); }
       rts.forEach(({ r, pk, end, role }) => {
         const card = el("div", "rentcard"); card.dataset.role = role; card.dataset.date = k;
-        const head = role === "mid" ? `レンタカー使用中（${md(pk)} 受け取り〜${md(end)} 返却）` : role === "ret" ? `レンタカーを返す日（${md(pk)} に受け取り）` : role === "pick" ? `レンタカーを受け取る日（${md(end)} に返却）` : "レンタカー（この日に受け取って返す）";
+        const rk = rentKind(r), head = role === "mid" ? `${rk}使用中（${md(pk)} 受け取り〜${md(end)} 返却）` : role === "ret" ? `${rk}を返す日（${md(pk)} に受け取り）` : role === "pick" ? `${rk}を受け取る日（${md(end)} に返却）` : `${rk}（この日に受け取って返す）`;
         const hb = el("b", null, head);
-        const ed = el("button", "link", "編集"); ed.type = "button"; ed.style.marginLeft = "8px"; ed.onclick = () => openSheet(`${md(pk)}　レンタカー`, rentalForm(pk, closeSheet)); hb.append(ed);
+        const ed = el("button", "link", "編集"); ed.type = "button"; ed.style.marginLeft = "8px"; ed.onclick = () => openSheet(`${md(pk)}　${rk}`, rentalForm(pk, closeSheet)); hb.append(ed);
         card.append(hb);
         const lines = [];
         const co = [r.company, r.car].filter(Boolean).join("　"); if (co) lines.push(co);
@@ -2280,6 +2377,14 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
         if (costOf(r) && role !== "ret" && role !== "mid") lines.push(`料金：${yenIf(r)}`);
         if (r.memo) lines.push(r.memo);
         lines.forEach(t => card.append(el("span", "rl", t)));
+        dv.append(card);
+      });
+      ridesOf(k).forEach(x => {
+        const card = el("div", "rentcard ridecard"); card.dataset.ride = x.id; card.dataset.date = k;
+        const hb = el("b", null, `${x.kind || "移動"}（1区間の足）`);
+        const ed = el("button", "link", "編集"); ed.type = "button"; ed.style.marginLeft = "8px"; ed.onclick = () => openSheet(`${dtext}　${x.kind || "現地の足"}`, rideForm(k, x, closeSheet)); hb.append(ed);
+        card.append(hb, el("span", "rl", `${x.from}→${x.to}${x.time ? "　" + x.time + "ごろ" : ""}`));
+        if (costOf(x)) card.append(el("span", "rl", `金額：${yenIf(x)}`)); if (x.memo) card.append(el("span", "rl", x.memo));
         dv.append(card);
       });
       const dc = dayCostParts(k);
@@ -2379,6 +2484,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       sch.evs.forEach(ev => rail.append(ev.type === "base" ? baseNode(ev) : ev.type === "move" ? moveNode(ev) : ev.type === "meal" ? mealNode(ev) : slotZone(ev)));
       dv.append(rail); days.append(dv);
     });
+    travelOverride = null;
     // 登録リスト（画面の下に固定。横にスクロール）
     const tray = buildTray(open);
     const expRow = el("div", "dayact"); expRow.id = "board-export";
@@ -2581,15 +2687,17 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const timed = (uid, k, a, b, o) => vevent(uid, [`DTSTART:${icsDT(k, a)}`, `DTEND:${icsDT(k, Math.max(b, a + 15))}`], o);
     keys.forEach(k => {
       const i = list.indexOf(k); if (i < 0) return;
+      travelOverride = dayMode(k);
       const da = dayAt(list, i), sch = daySchedule(k, da), approx = "時間は目安です（直線距離から計算）。";
       if (hasBase(da.pm) && i < list.length - 1) { const d = dparse(k), d2 = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); vevent(`stay-${k}`, [`DTSTART;VALUE=DATE:${icsDate(d)}`, `DTEND;VALUE=DATE:${icsDate(d2)}`], { title: `宿：${baseName(da.pm)}`, loc: [da.pm.name, da.pm.address].filter(Boolean).join(" "), url: "" }); }
       rentalsFor(k).forEach(({ r, pk, end, role }) => {
         const hm = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
-        const nm = [r.company, r.car].filter(Boolean).join(" ") || "レンタカー";
+        const rk = rentKind(r), nm = [r.company, r.car].filter(Boolean).join(" ") || rk;
         const desc = [r.resno ? "予約番号 " + r.resno : "", r.tel ? "電話 " + r.tel : "", costOf(r) ? "料金 " + yenIf(r) : "", r.memo].filter(Boolean).join(" / ");
-        if ((role === "pick" || role === "same") && hm(r.pickTime) != null) timed(`rent-pick-${k}`, k, hm(r.pickTime), hm(r.pickTime) + 30, { title: `レンタカー受け取り：${nm}`, loc: r.pickPlace || r.company, desc });
-        if ((role === "ret" || role === "same") && hm(r.retTime) != null) timed(`rent-ret-${k}`, k, hm(r.retTime), hm(r.retTime) + 15, { title: `レンタカー返却：${nm}`, loc: r.retPlace || r.pickPlace || r.company, desc, alarm: 60 });
+        if ((role === "pick" || role === "same") && hm(r.pickTime) != null) timed(`rent-pick-${k}`, k, hm(r.pickTime), hm(r.pickTime) + 30, { title: `${rk}受け取り：${nm}`, loc: r.pickPlace || r.company, desc });
+        if ((role === "ret" || role === "same") && hm(r.retTime) != null) timed(`rent-ret-${k}`, k, hm(r.retTime), hm(r.retTime) + 15, { title: `${rk}返却：${nm}`, loc: r.retPlace || r.pickPlace || r.company, desc, alarm: 60 });
       });
+      ridesOf(k).forEach(x => { const t = hm(x.time); if (t != null) timed(`ride-${x.id}`, k, t, t + 30, { title: `${x.kind || "移動"}　${x.from}→${x.to}`, loc: x.from, desc: [costOf(x) ? "金額 " + yenIf(x) : "", x.memo].filter(Boolean).join(" / ") }); });
       sch.evs.forEach(e => {
         if (e.type === "move") { const m = e.m; timed(`mv-${m.id}`, k, e.start, e.end, { title: `${m.kind || "移動"}${m.name ? " " + m.name : ""}　${m.from || ""}→${m.to || ""}`, loc: m.from, desc: ["絶対に外せない移動", m.memo].filter(Boolean).join("\n"), url: cleanTicketUrl(m.url), alarm: m.kind === "飛行機" ? 120 : 60 }); }
         else if (e.type === "meal" && hasMeal(e.m)) {
@@ -2602,6 +2710,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
         });
       });
     });
+    travelOverride = null;
     L.push("END:VCALENDAR");
     return { text: L.map(icsFold).join("\r\n") + "\r\n", count: n };
   }
@@ -3295,7 +3404,8 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const wxL = ad ? wxLine(ad.date) : "";
     if (wxL) L.push("## 今日の天気予報（目安）", `- ${wxL}`, "");
     const rentLines = ad ? ad.rentals.map(x => `- ${rentalLine(x.r, x.pk)}（${x.role === "mid" ? "使用中" : x.role === "ret" ? "今日返却" : x.role === "pick" ? "今日受け取り" : "今日受け取って返却"}）`) : [];
-    if (rentLines.length) L.push("## レンタカー（借りている・借りる予定）", ...rentLines, "");
+    const rideLines = ad ? ridesOf(ad.date).map(x => `- ${rideText(x)}`) : [];
+    if (rentLines.length || rideLines.length) L.push("## 現地の足（借りている・使う予定。レンタカー・タクシー・バスなど）", ...rentLines, ...rideLines, "");
     const moveLines = ad ? ad.moves.map(m => `- ${moveText(m)}`) : [];
     if (moveLines.length) L.push("## 絶対に外せない移動（動かせない。拠点より優先）", ...moveLines, "");
     const mealLines = ad ? MEALS.filter(([key]) => hasMeal(ad.meals[key])).map(([key, label]) => `- ${label}：${mealText(ad.meals[key], ad.date)}`) : [];
@@ -3331,7 +3441,8 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       ...(ad && ad.area ? [`- 今日のエリア（${ad.area}）の場所を優先して組む。ほかのエリアの場所は、近いときだけ入れる`] : []),
       ...(mine ? ["- 「自分で組んだ今日の予定」の区分（午前・午後・夜）と順番を基本にして時刻を組む。無理なら入れかえてよいが、理由を書く"] : []),
       ...(wxL ? [`- 天気予報を考えて組む${wxWet(ad.date) ? "（雨・雪のおそれがある。屋内の場所や、濡れにくい順番を優先し、傘・寒さの注意も一言そえる）" : ""}`] : []),
-      ...(rentLines.length ? ["- レンタカーは、受け取り・返却の場所と時刻を守る（返却前に給油・駐車場所の確認の余裕を取る）。車で行くので、駐車場や道の混み具合も考えて組む"] : []),
+      ...(rentLines.length ? ["- 借りている足（レンタカー・レンタサイクル）は、受け取り・返却の場所と時刻を守る（返却前に給油・駐車場所の確認の余裕を取る）。その足で行ける場所を中心に、駐車場や道の混み具合も考えて組む"] : []),
+      ...(rideLines.length ? ["- 1区間の足（タクシー・バス・フェリーなど）に書いた区間と時刻は、そのとおりに組みこむ"] : []),
       ...(moveLines.length ? [`- 外せない移動は、時刻も乗り場も動かさない。出発の${ad.moves.some(m => m.kind === "飛行機") ? "30分〜1時間" : "30分"}前までに乗り場に着けるよう、他の予定をその前後に収める。間に合わない予定は外し、危ういときは正直に伝える`] : []),
       "- 移動ごとに出発時刻・手段（路線やバス停）・所要時間・運賃の目安と、Googleマップの経路リンク",
       "- 最初に「いますぐやること」を1行、そのあと時刻順の短い箇条書き。確かめられない情報は「要確認」"
@@ -3367,7 +3478,8 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       const ar = areaOfDay(k); if (ar) { L.push(`  エリア：${ar}`); anyArea = true; }
       const own = slotLine(k); if (own) { L.push(`  自分で組みずみ：${own}`); anyOwn = true; }
       const wl = wxLine(k); if (wl) { L.push(`  天気予報：${wl}`); anyWx = true; }
-      const rl = rentalsFor(k).filter(x => x.role === "pick" || x.role === "same" || x.role === "ret").map(x => `${x.role === "ret" ? "返却" : "受け取り"}：${rentalLine(x.r, x.pk)}`); if (rl.length) L.push(`  レンタカー：${rl.join("／")}`);
+      const rl = rentalsFor(k).filter(x => x.role === "pick" || x.role === "same" || x.role === "ret").map(x => `${x.role === "ret" ? "返却" : "受け取り"}：${rentalLine(x.r, x.pk)}`); if (rl.length) L.push(`  借りる足：${rl.join("／")}`);
+      const rdl = ridesOf(k).map(rideText); if (rdl.length) L.push(`  1区間の足：${rdl.join("／")}`);
       const mvl = movesOf(k).map(moveText);
       if (mvl.length) { L.push(`  外せない移動（動かせない）：${mvl.join("／")}`); anyMove = true; }
       if (ml.length) { L.push(`  食事の希望：${ml.join("／")}`); anyMeal = true; } });
