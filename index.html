@@ -73,7 +73,12 @@ body:not([data-view=main]):not([data-view=all]) details.card>summary{display:non
 .seg button{flex:1;font:inherit;font-size:14px;font-weight:700;border:0;background:transparent;color:var(--muted);border-radius:11px;padding:9px 6px;cursor:pointer}
 .seg button[aria-selected=true]{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
 body[data-mode=plan] .only-now,body[data-mode=now] .only-plan{display:none!important}
-#main-sec>#trip-card{order:-5}#main-sec>#steps{order:-4}#main-sec>#qa-card{order:-3}#main-sec>#board-card{order:-2}
+#main-sec>#trip-card{order:-5}#main-sec>#steps{order:-4}#main-sec>#st-1,#main-sec>#st-2,#main-sec>#st-3,#main-sec>#st-4{order:-3}#main-sec>#qa-card{order:-3}#main-sec>#board-card{order:-2}
+body:not([data-view=all]) .stp.stp-off{display:none!important}
+.steps.six{grid-template-columns:repeat(3,1fr)!important}
+.steps.six button{border-bottom:1px solid var(--line)}
+.stp .stpday{border-top:1px solid var(--line);padding-top:8px}
+.stp .stpday>b{font-family:var(--display);font-size:14px}
 #main-sec>#spots-head{order:1}#main-sec>#spots-note{order:2}#main-sec>#spots{order:3}#main-sec>#plan-card{order:4}#main-sec>#hub-card{order:5}#main-sec>#add-box{order:6}
 .steps{display:flex;gap:6px}
 .steps button{flex:1;font:inherit;text-align:left;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:7px 9px;cursor:pointer;line-height:1.3}
@@ -587,7 +592,16 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   <!-- 行きたい場所 -->
   <section class="stack" aria-labelledby="h-spots" id="main-sec">
     <nav class="steps only-plan vmain" id="steps" aria-label="進めかた"></nav>
-    <section class="card stack qa only-plan vmain" id="qa-card" aria-labelledby="h-qa">
+    <section class="card stack only-plan vmain stp" id="st-1" data-step="1"><h2>1 日程を決める</h2>
+      <div class="grid" id="dates-box">
+        <label>旅の開始日<input type="date" id="plan-start"></label>
+        <label>旅の終了日<input type="date" id="plan-end"></label>
+      </div>
+      <span class="note" id="st-1-sum"></span><div class="row" id="st-1-next"></div></section>
+    <section class="card stack only-plan vmain stp" id="st-2" data-step="2"><h2>2 行き先・エリアを決める</h2><div class="stack" id="st-2-body"></div></section>
+    <section class="card stack only-plan vmain stp" id="st-3" data-step="3"><h2>3 移動手段を決める</h2><div class="stack" id="st-3-body"></div></section>
+    <section class="card stack only-plan vmain stp" id="st-4" data-step="4"><h2>4 宿（拠点）を決める</h2><div class="stack" id="st-4-body"></div></section>
+    <section class="card stack qa only-plan vmain stp" id="qa-card" data-step="5" aria-labelledby="h-qa">
       <h2 id="h-qa">行きたい場所を集める</h2>
       <p class="note expl" style="margin:0">Googleマップで場所を開き、「共有」でコピーしたリンクを貼るだけ。名前や住所は自動で入ります。まとめて入れたいときは、1つずつ続けて貼ってください。</p>
       <div class="row" style="flex-wrap:nowrap">
@@ -659,12 +673,8 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
         <p class="note" id="plan-note"></p>
       </div>
     </details>
-    <section class="card stack only-plan vmain" id="board-card" aria-labelledby="h-board">
+    <section class="card stack only-plan vmain stp" id="board-card" data-step="6" aria-labelledby="h-board">
       <h2 id="h-board">日ごとに割りふる <span class="note" id="board-sum"></span></h2>
-      <div class="grid" id="dates-box">
-        <label>旅の開始日<input type="date" id="plan-start"></label>
-        <label>旅の終了日<input type="date" id="plan-end"></label>
-      </div>
       <p class="note expl" style="margin:0">下の「登録リスト」のカードの、左がわの点々（つまみ）をつかんで、上の枠（午前・午後・夜）や、朝食・昼食・夕食の行へ動かして入れます（食事の行へ入れると、その場所が食事の場所になります）。入れたカードも、点々をつかんで動かせます。「コンパクト／くわしく」で、リストの見た目を切りかえられます。日付のタブの上で少し止めると、別の日に切りかわります。外すときは、リストに戻すか「×」。入れた順番が、お願い文に入ります。</p>
       <div id="board"></div>
     </section>
@@ -873,7 +883,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   let state = { spots: [], here: null, settings: {} };
   try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && Array.isArray(s.spots)) state = Object.assign(state, s); } catch {}
   // 日程と拠点（古いデータにはないので、空として扱う）
-  function normPlan(p){ const o = p && typeof p === "object" ? p : {}; return { start: typeof o.start === "string" ? o.start : "", end: typeof o.end === "string" ? o.end : "", days: o.days && typeof o.days === "object" ? o.days : {}, hubs: Array.isArray(o.hubs) ? o.hubs.filter(h => h && typeof h === "object" && h.name) : [] }; }
+  function normPlan(p){ const o = p && typeof p === "object" ? p : {}; return { dest: typeof o.dest === "string" ? o.dest.slice(0, 40) : "", start: typeof o.start === "string" ? o.start : "", end: typeof o.end === "string" ? o.end : "", days: o.days && typeof o.days === "object" ? o.days : {}, hubs: Array.isArray(o.hubs) ? o.hubs.filter(h => h && typeof h === "object" && h.name) : [] }; }
   const planEmpty = p => !p.start && !p.end && !Object.keys(p.days).length && !p.hubs.length;
   // キーの並びに関係なく、中身が同じなら同じ文字になる（クラウドは並び順を入れかえて返すことがあるため）
   function canon(v){ return JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x); }
@@ -1682,7 +1692,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   // 入れていない欄に、「前の夜と同じ」などの目安を薄く出す／位置の取得状況を出す
   function refreshPlanLabels(){
     const list = dayList();
-    document.querySelectorAll("#plan-days [data-slot]").forEach(box => {
+    document.querySelectorAll("#plan-days [data-slot], #st-4-body [data-slot]").forEach(box => {
       const k = box.dataset.date, i = list.indexOf(k), slot = box.dataset.slot; if (i < 0) return;
       const own = (state.plan.days[k] || {})[slot], eff = effBase(list, i, slot);
       const inh = own && hasBase(own) ? null : eff;
@@ -2758,9 +2768,9 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     renderPlanNote();
     const wasOpen = new Set([...box.querySelectorAll(":scope > details[open]")].map(d => d.dataset.date));
     box.textContent = "";
-    if (!list.length) { box.append(el("p", "note", "開始日と終了日を入れると、日ごとの拠点を登録できます。")); renderDayLine(); renderSpots(); return; }
+    if (!list.length) { box.append(el("p", "note", "開始日と終了日を入れると、日ごとの拠点を登録できます。")); renderDayLine(); renderSpots(); renderStepPanels(); return; }
     list.forEach(k => { const d = el("details", "rt"); d.dataset.date = k; d.open = wasOpen.has(k); d.append(el("summary", null, "")); const w = el("div", "stack"); w.style.gap = "12px"; w.append(areaBox(k), moveEditor(k), slotEditor(k, "am"), slotEditor(k, "pm"), mealEditor(k)); d.append(w); box.append(d); });
-    refreshPlanLabels(); renderDayLine(); renderSpots();
+    refreshPlanLabels(); renderDayLine(); renderSpots(); renderStepPanels();
   }
   function renderPlanNote(){
     $("plan-note").textContent = session && cloud.planOk === false ? "拠点をクラウドに保存して共有するには、Supabaseで 003_plan_coords.sql を実行してください。それまでは、この端末の中だけに保存されます。" : "";
@@ -3198,16 +3208,62 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     $("h-sub").hidden = m !== "plan";
   }
   document.querySelectorAll("#mode-seg button").forEach(b => b.onclick = () => { state.settings["ui-mode"] = b.dataset.mode; save(); applyMode(); renderBoard(); scrollTo(0, 0); });
-  // 手順の帯：1 集める → 2 割りふる → 3 くわしく
+  // 手順の帯（6つ）：1 日程 → 2 行き先・エリア → 3 移動手段 → 4 宿（拠点） → 5 行きたい場所 → 6 タイムテーブル。いま開いている手順だけが広がる（アコーディオン）
+  const STEP_NAMES = ["日程", "行き先・エリア", "移動手段", "宿（拠点）", "行きたい場所", "割りふり"];
+  function stepStat(){
+    const list = dayList(), open = state.spots.filter(s => !s.done), n = open.length, placed = open.filter(s => whereIs(s.id)).length;
+    const days = list.map(k => state.plan.days[k] || {});
+    const dest = (state.plan.dest || "").trim(), areas = days.filter(d => d.area).length;
+    const moves = list.reduce((a, k) => a + movesOf(k).length + ridesOf(k).length + (rentalOf(k) ? 1 : 0), 0);
+    const bases = days.filter(d => hasBase(d.am) || hasBase(d.pm)).length;
+    return [
+      { ok: list.length > 0, sub: list.length ? `${list.length}日間` : "未設定" },
+      { ok: !!dest || areas > 0, sub: dest || (areas ? `エリア ${areas}日` : "未入力") },
+      { ok: moves > 0, sub: moves ? `${moves}件` : "なし" },
+      { ok: bases > 0, sub: list.length ? `${bases}/${list.length}日` : "-" },
+      { ok: n > 0, sub: n ? `${n}か所` : "まだ0か所" },
+      { ok: n > 0 && placed === n, sub: n ? `${placed}/${n}か所` : "-" }
+    ];
+  }
+  const planStep = () => { const v = Number(state.settings["plan-step"]); if (v >= 1 && v <= 6) return v; const st = stepStat(); return !st[0].ok ? 1 : !st[4].ok ? 5 : 6; };
+  function setStep(v, scroll){
+    state.settings["plan-step"] = v; save(); applySteps(); renderStepPanels();
+    if (scroll !== false) { const b = $("steps"); if (b) b.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }
+  function applySteps(){
+    const cur = planStep();
+    document.querySelectorAll(".stp").forEach(e => e.classList.toggle("stp-off", Number(e.dataset.step) !== cur));
+    document.querySelectorAll("#steps button").forEach(b => b.classList.toggle("cur", Number(b.dataset.step) === cur));
+  }
   function renderSteps(){
-    const box = $("steps"); if (!box) return; box.textContent = "";
-    const open = state.spots.filter(s => !s.done), n = open.length, placed = open.filter(s => whereIs(s.id)).length;
-    const thin = open.filter(s => !s.address || !s.hours).length;
-    const cur = !n ? 1 : placed < n ? 2 : 3;
-    const mk = (no, title, sub, target) => { const b = el("button"); b.type = "button"; b.className = (cur === no ? "cur" : cur > no ? "ok" : ""); const t = el("b"); t.append(el("i", null, String(no)), document.createTextNode(title)); b.append(t, el("small", null, sub)); b.onclick = () => { if (target === "plan-card") { go("days"); return; } const e = $(target); if (e) e.scrollIntoView({ behavior: "smooth", block: "start" }); if (e && e.tagName === "DETAILS") e.open = true; }; box.append(b); };
-    mk(1, "集める", n ? `${n}か所` : "まだ0か所", "qa-card");
-    mk(2, "割りふる", n ? `${placed}/${n}か所` : "-", "board-card");
-    mk(3, "くわしく", thin ? `未入力 ${thin}件` : n ? "そろった" : "-", "plan-card");
+    const box = $("steps"); if (!box) return; box.textContent = ""; box.classList.add("six");
+    const st = stepStat(), cur = planStep();
+    st.forEach((x, i) => {
+      const no = i + 1, b = el("button"); b.type = "button"; b.dataset.step = no; b.className = cur === no ? "cur" : x.ok ? "ok" : "";
+      const t = el("b"); t.append(el("i", null, String(no)), document.createTextNode(STEP_NAMES[i])); b.append(t, el("small", null, x.sub));
+      b.setAttribute("aria-expanded", cur === no ? "true" : "false"); b.onclick = () => setStep(no); box.append(b);
+    });
+    applySteps();
+  }
+  // 手順2〜4の中身（日ごとの入力欄は、「3 日ごとの詳細」と同じもの）。入力中に作りなおさないよう、手順を開いたときと日程が変わったときだけ作る
+  function renderStepPanels(){
+    const list = dayList(), cur = planStep();
+    const next = no => { const row = el("div", "row"), b = el("button", "btn small", no === 6 ? "割りふりへ" : `次へ（${no + 1} ${STEP_NAMES[no]}）`); b.type = "button"; b.dataset.next = no + 1; b.onclick = () => setStep(no + 1); row.append(b); return row; };
+    const perDay = (body, mk) => { if (!list.length) { body.append(el("p", "note", "先に「1 日程」で、開始日と終了日を入れてください。")); return; } list.forEach((k, i) => { const d = el("div", "stack stpday"); d.style.gap = "6px"; d.append(el("b", null, dayLabel(k, i)), ...mk(k)); body.append(d); }); };
+    const fill = (id, f) => { const body = $(id); if (!body || (document.activeElement && body.contains(document.activeElement))) return; body.textContent = ""; f(body); };
+    $("st-1-sum").textContent = list.length ? `${list.length}日間の旅です。` : "開始日と終了日を入れてください。";
+    const n1 = $("st-1-next"); if (n1 && !n1.firstChild) n1.append(next(1));
+    if (cur === 2) fill("st-2-body", body => {
+      const dl = el("label", null, "旅ぜんたいの行き先（わかれば）"), di = mkInput("trip-dest", "旅の行き先", 40); di.placeholder = "例：京都・大阪、北海道"; di.value = state.plan.dest || "";
+      di.onchange = () => { state.plan.dest = di.value.trim().slice(0, 40); changePlan(); renderSteps(); }; dl.append(di); body.append(dl);
+      body.append(el("span", "note", "日ごとのエリアは、あとでその日の場所を選ぶときの目安になります。"));
+      perDay(body, k => [areaBox(k)]); body.append(next(2));
+    });
+    if (cur === 3) fill("st-3-body", body => {
+      body.append(el("span", "note", "ここには、時刻が決まっていて動かせない移動（新幹線・飛行機など）を入れます。レンタカー・タクシー・バスなどの現地の足は、「6 割りふり」の日ごとの画面の「＋ 現地の足」から入れます。"));
+      perDay(body, k => [moveEditor(k)]); body.append(next(3));
+    });
+    if (cur === 4) fill("st-4-body", body => { perDay(body, k => [slotEditor(k, "am"), slotEditor(k, "pm")]); body.append(next(4)); refreshPlanLabels(); });
   }
   // ---------- かんたん追加：リンクを貼るだけ ----------
   let qaPending = null;
@@ -3398,6 +3454,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     if (kind === "day") L.push(`- 出発：${S("start-time") || "09:00"}に朝の拠点から`);
     L.push(`- 終わり：${S("end-time") || "未定"}に${S("end-place") || (ad && hasBase(ad.pm) ? baseName(ad.pm) : "（未定）")}へ戻る`);
     L.push(`- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}${S("weather") ? "／" + S("weather") : ""}`);
+    if (state.plan.dest) L.push(`- 旅の行き先：${state.plan.dest}`);
     if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
     L.push("");
     if (hubs().length) { L.push("## 交通の拠点（駅・バス停など）"); hubs().forEach(h => { const d = distText(h, ad); L.push(`- ${h.kind}：${h.name}${h.address ? "（" + h.address + "）" : ""}${d ? "　" + d : ""}`); }); L.push(""); }
@@ -3485,6 +3542,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       if (ml.length) { L.push(`  食事の希望：${ml.join("／")}`); anyMeal = true; } });
     bases.forEach((b, i) => L.push(`  拠点${String.fromCharCode(65 + i)}：${fmtBase(b)}`));
     L.push("", "## 旅の条件", `- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}`);
+    if (state.plan.dest) L.push(`- 旅の行き先：${state.plan.dest}`);
     if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
     if (hubs().length) { L.push("", "## 交通の拠点（駅・バス停など）"); hubs().forEach(h => L.push(`- ${h.kind}：${h.name}${h.address ? "（" + h.address + "）" : ""}`)); }
     const todo = sorted().filter(x => !x.done);
