@@ -883,7 +883,13 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   let state = { spots: [], here: null, settings: {} };
   try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && Array.isArray(s.spots)) state = Object.assign(state, s); } catch {}
   // 日程と拠点（古いデータにはないので、空として扱う）
-  function normPlan(p){ const o = p && typeof p === "object" ? p : {}; return { dest: typeof o.dest === "string" ? o.dest.slice(0, 40) : "", start: typeof o.start === "string" ? o.start : "", end: typeof o.end === "string" ? o.end : "", days: o.days && typeof o.days === "object" ? o.days : {}, hubs: Array.isArray(o.hubs) ? o.hubs.filter(h => h && typeof h === "object" && h.name) : [] }; }
+  // 出発点の最寄駅（旅ぜんたい。メイン1つ・サブ1つ）：`plan.origin = { main?: { name, lat?, lng? }, sub?: {...} }`
+  function normOrigin(v){
+    const out = {}; if (!v || typeof v !== "object") return out;
+    ["main", "sub"].forEach(k => { const x = v[k]; if (x && typeof x.name === "string" && x.name.trim()) { const o = { name: x.name.trim().slice(0, 40) }; if (Number.isFinite(x.lat) && Number.isFinite(x.lng)) { o.lat = x.lat; o.lng = x.lng; } out[k] = o; } });
+    return out;
+  }
+  function normPlan(p){ const o = p && typeof p === "object" ? p : {}; return { dest: typeof o.dest === "string" ? o.dest.slice(0, 40) : "", origin: normOrigin(o.origin), start: typeof o.start === "string" ? o.start : "", end: typeof o.end === "string" ? o.end : "", days: o.days && typeof o.days === "object" ? o.days : {}, hubs: Array.isArray(o.hubs) ? o.hubs.filter(h => h && typeof h === "object" && h.name) : [] }; }
   const planEmpty = p => !p.start && !p.end && !Object.keys(p.days).length && !p.hubs.length;
   // キーの並びに関係なく、中身が同じなら同じ文字になる（クラウドは並び順を入れかえて返すことがあるため）
   function canon(v){ return JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x); }
@@ -1934,7 +1940,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       find.onclick = async () => { const t = input.value.trim(); if (!t) { st.textContent = `${label}の名前を入れてください`; return; } st.textContent = "調べています…"; const g = await geocode({ name: t }); if (g) { pos[w] = g; show(); } else { pos[w] = null; st.textContent = `${label}の位置は見つかりませんでした。「緯度, 経度」を手で入れてもOKです`; } };
       man.onchange = () => { const t = man.value.trim(); if (!t) return; const g = parseLatLng(t); if (g) { pos[w] = g; man.value = ""; show(); } else st.textContent = "「35.68, 139.76」のように、緯度と経度を入れてください"; };
       input.addEventListener("input", () => { pos[w] = null; show(); }); // 名前を書きかえたら、前の位置は捨てる
-      show(); row.append(st, find, man); return row;
+      row.addEventListener("pos-show", show); show(); row.append(st, find, man); return row;
     };
     const dep = mkInput("mv-dep", "出発時刻", 5); dep.type = "time"; const arr = mkInput("mv-arr", "到着時刻", 5); arr.type = "time";
     const dl = el("label", null, "出発時刻"); dl.append(dep); const al = el("label", null, "到着時刻（わかれば）"); al.append(arr);
@@ -1955,7 +1961,11 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
       changePlan(); locateMove(k, mid || (mv && mv.id)); // 位置が入っていない側は、裏で調べる
       if (done) done(); else renderPlan();
     };
-    form.append(kind, name, from, posRow("from", from, "出発地"), to, posRow("to", to, "到着地"), dl, al, costL, tl, memo, add);
+    const fromRow = posRow("from", from, "出発地"), toRow = posRow("to", to, "到着地");
+    // 出発点の最寄駅（メイン・サブ）をワンタップで入れる
+    const orgChips = (input, w, row, head) => { const o = originList(); if (!o.length) return null; const c = el("div", "row"); c.style.gap = "6px"; c.dataset.orgchips = w;
+      o.forEach(x => { const b = el("button", "pillbtn", `${head}：${x.name}（${x.label}）`); b.type = "button"; b.onclick = () => { input.value = x.name; input.dispatchEvent(new Event("input")); pos[w] = x.p ? { lat: x.p.lat, lng: x.p.lng } : null; row.dispatchEvent(new Event("pos-show")); if (!x.p) locateOrigin(x.key); }; c.append(b); }); return c; };
+    form.append(kind, name, from, ...[orgChips(from, "from", fromRow, "出発")].filter(Boolean), fromRow, to, ...[orgChips(to, "to", toRow, "到着")].filter(Boolean), toRow, dl, al, costL, tl, memo, add);
     if (mv) { const del = el("button", "link", "この移動を削除"); del.type = "button"; del.style.alignSelf = "flex-start"; del.style.color = "var(--star)";
       del.onclick = () => { if (!confirm("この移動を削除しますか？")) return; const d = state.plan.days[k]; d.moves = d.moves.filter(x => x.id !== mv.id); pruneDay(k); changePlan(); if (done) done(); else renderPlan(); }; form.append(del); }
     form.append(msg);
@@ -2284,6 +2294,36 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     if (opt.used) c.classList.add("used");
     return c;
   }
+  // 出発点の最寄駅：メイン・サブ（名前のあるものだけ）
+  const originLine = () => { const o = originList(); return o.length ? "出発点の最寄駅：" + o.map(x => `${x.label} ${x.name}`).join("／") + "（メインを基本に使う。サブは代わりの乗り場）" : ""; };
+  const ORG_LABEL = { main: "メイン", sub: "サブ" };
+  const originList = () => ["main", "sub"].map(k => { const o = (state.plan.origin || {})[k]; return o && o.name ? { key: k, label: ORG_LABEL[k], name: o.name, p: hasPos(o) ? { lat: o.lat, lng: o.lng } : null } : null; }).filter(Boolean);
+  const stationQuery = n => /(駅|停|空港|港|ターミナル)$/.test(n) ? n : n + "駅";
+  const orgStatus = key => { const o = (state.plan.origin || {})[key]; return !o || !o.name ? "" : hasPos(o) ? "位置：分かっています" : "位置：まだ分かりません（駅名から自動で調べます）"; };
+  async function locateOrigin(key){
+    const o0 = (state.plan.origin || {})[key]; if (!o0 || hasPos(o0)) return;
+    const nm = o0.name, ll = parseLatLng(nm), g = ll || await geocode({ name: stationQuery(nm) });
+    const o = (state.plan.origin || {})[key]; if (!o || o.name !== nm || hasPos(o)) return;
+    if (g) { o.lat = g.lat; o.lng = g.lng; changePlan(); }
+    const st = document.querySelector(`[data-orgpos="${key}"]`); if (st) st.textContent = orgStatus(key);
+  }
+  // 手順3の「出発点」の入力欄
+  function originBox(){
+    const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.originBox = "1";
+    box.append(el("b", null, "出発点（最寄駅。2つまで）"), el("span", "note", "自宅などから乗る駅です。メインを1つ、サブ（予備）をもう1つ入れられます。外せない移動の出発地や、日割りの距離の目安に使います。"));
+    ["main", "sub"].forEach(key => {
+      const l = el("label", null, key === "main" ? "メインの最寄駅" : "サブの最寄駅（あれば）"), i = mkInput("org-" + key, ORG_LABEL[key] + "の最寄駅", 40); i.placeholder = key === "main" ? "例：新宿駅" : "例：代々木駅"; i.value = ((state.plan.origin || {})[key] || {}).name || "";
+      const st = el("span", "note"); st.dataset.orgpos = key; st.textContent = orgStatus(key);
+      i.onchange = () => {
+        const v = i.value.trim().slice(0, 40), cur = (state.plan.origin || {})[key];
+        if ((cur ? cur.name : "") === v) return;
+        state.plan.origin = state.plan.origin || {}; if (v) state.plan.origin[key] = { name: v }; else delete state.plan.origin[key];
+        st.textContent = orgStatus(key); changePlan(); renderSteps(); if (v) locateOrigin(key);
+      };
+      l.append(i); box.append(l, st);
+    });
+    return box;
+  }
   // 割りふりの基準点：その日の拠点・外せない移動の出発地と到着地・借りる足の受け取りと返却・1区間の足の始点と終点（位置が分かるものだけ）
   function dayRefs(k){
     const list = dayList(), i = list.indexOf(k); if (i < 0) return [];
@@ -2291,6 +2331,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const add = (label, p) => { if (p && hasPos(p) && !out.some(o => km(o.p, p) < 0.1)) out.push({ label, p: { lat: p.lat, lng: p.lng } }); };
     const same = hasPos(da.am) && hasPos(da.pm) && km(da.am, da.pm) < 0.1;
     add(same ? "拠点" : "朝の拠点", da.am); add("夜の拠点", da.pm);
+    if (i === 0) originList().forEach(o => add(`${o.name}（${o.label}の最寄駅）`, o.p));
     movesOf(k).forEach(m => { add(`${m.from}（出発）`, moveEnd(m, "from")); add(`${m.to}（到着）`, moveEnd(m, "to")); });
     rentalsFor(k).forEach(({ r, role }) => { const rk = rentKind(r); if (role === "pick" || role === "same") add(`${rk}（受け取り）`, rentEnd(r, "pick")); if (role === "ret" || role === "same") add(`${rk}（返却）`, rentEnd(r, "ret") || rentEnd(r, "pick")); });
     ridesOf(k).forEach(x => { add(`${x.from}（のる）`, rideEnd(x, "from")); add(`${x.to}（おりる）`, rideEnd(x, "to")); });
@@ -3219,7 +3260,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     return [
       { ok: list.length > 0, sub: list.length ? `${list.length}日間` : "未設定" },
       { ok: !!dest || areas > 0, sub: dest || (areas ? `エリア ${areas}日` : "未入力") },
-      { ok: moves > 0, sub: moves ? `${moves}件` : "なし" },
+      { ok: moves > 0 || originList().length > 0, sub: [originList()[0] ? originList()[0].name : "", moves ? `${moves}件` : ""].filter(Boolean).join("・") || "なし" },
       { ok: bases > 0, sub: list.length ? `${bases}/${list.length}日` : "-" },
       { ok: n > 0, sub: n ? `${n}か所` : "まだ0か所" },
       { ok: n > 0 && placed === n, sub: n ? `${placed}/${n}か所` : "-" }
@@ -3261,6 +3302,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     });
     if (cur === 3) fill("st-3-body", body => {
       body.append(el("span", "note", "ここには、時刻が決まっていて動かせない移動（新幹線・飛行機など）を入れます。レンタカー・タクシー・バスなどの現地の足は、「6 割りふり」の日ごとの画面の「＋ 現地の足」から入れます。"));
+      body.append(originBox());
       perDay(body, k => [moveEditor(k)]); body.append(next(3));
     });
     if (cur === 4) fill("st-4-body", body => { perDay(body, k => [slotEditor(k, "am"), slotEditor(k, "pm")]); body.append(next(4)); refreshPlanLabels(); });
@@ -3455,6 +3497,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     L.push(`- 終わり：${S("end-time") || "未定"}に${S("end-place") || (ad && hasBase(ad.pm) ? baseName(ad.pm) : "（未定）")}へ戻る`);
     L.push(`- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}${S("weather") ? "／" + S("weather") : ""}`);
     if (state.plan.dest) L.push(`- 旅の行き先：${state.plan.dest}`);
+    { const ol = originLine(); if (ol) L.push(`- ${ol}`); }
     if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
     L.push("");
     if (hubs().length) { L.push("## 交通の拠点（駅・バス停など）"); hubs().forEach(h => { const d = distText(h, ad); L.push(`- ${h.kind}：${h.name}${h.address ? "（" + h.address + "）" : ""}${d ? "　" + d : ""}`); }); L.push(""); }
@@ -3543,6 +3586,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     bases.forEach((b, i) => L.push(`  拠点${String.fromCharCode(65 + i)}：${fmtBase(b)}`));
     L.push("", "## 旅の条件", `- ${S("mode")}／${S("people") || 1}人／体力${S("energy")}`);
     if (state.plan.dest) L.push(`- 旅の行き先：${state.plan.dest}`);
+    { const ol = originLine(); if (ol) L.push(`- ${ol}`); }
     if (S("trip-memo")) L.push(`- 旅のメモ：${S("trip-memo")}`);
     if (hubs().length) { L.push("", "## 交通の拠点（駅・バス停など）"); hubs().forEach(h => L.push(`- ${h.kind}：${h.name}${h.address ? "（" + h.address + "）" : ""}`)); }
     const todo = sorted().filter(x => !x.done);
