@@ -802,6 +802,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   <details class="card" id="settings-card" data-v="settings">
     <summary>旅の設定・バックアップ</summary>
     <div class="stack">
+      <div class="stack" id="home-section" style="gap:6px"><b>自分の情報（いつもの最寄駅）</b><span class="note">自宅などから乗る駅を、メイン1つ・サブ1つまで登録しておくと、どの旅でも出発点に使えます。ログインしていれば、ほかの端末にも引きつがれます。</span><div id="home-box"></div></div>
       <label>旅のメモ（Claudeに毎回伝えたいこと）<textarea id="trip-memo" maxlength="400" placeholder="例：母と2人旅。階段が多い所は少なめに。ICOCA持ち。お昼は和食がいい"></textarea></label>
       <label class="row" style="flex-direction:row;gap:8px;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="allow-new" style="width:auto" checked> リストにない近くのおすすめも提案してもらう</label>
       <div class="stack" style="gap:6px">
@@ -894,6 +895,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   // キーの並びに関係なく、中身が同じなら同じ文字になる（クラウドは並び順を入れかえて返すことがあるため）
   function canon(v){ return JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x); }
   state.plan = normPlan(state.plan);
+  state.home = normOrigin(state.home); // 自分の「いつもの最寄駅」（旅ごとではない。メイン1つ・サブ1つ）
   if (!state.settings || typeof state.settings !== "object") state.settings = {}; // 古い・こわれたデータでも止まらないように
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} renderGuard(); };
   // 「このデータは消さないで」とブラウザにお願いする（できる端末だけ）
@@ -981,6 +983,25 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   const sharedOn = () => !!session && cloud.features === true && !!sync.tripId;
   const featureMissing = e => !!e && (e.code === "PGRST205" || e.code === "42P01" || /schema cache|does not exist/i.test(e.message || ""));
 
+  // 自分の「いつもの最寄駅」を、profiles.home（005_profile_home.sql）に保存する。列が無いあいだ（cloud.home が false）は、この端末だけ
+  async function syncHome(){
+    if (!session || cloud.home === false || cloud.homeBusy) return;
+    cloud.homeBusy = true;
+    try {
+      const uid = session.user.id;
+      const { data, error } = await sb.from("profiles").select("home").eq("id", uid).maybeSingle();
+      if (error) { if (featureMissing(error) || error.code === "42703" || /home/.test(error.message || "")) cloud.home = false; return; }
+      const remote = normOrigin(data && data.home), local = normOrigin(state.home);
+      const hasR = !!(remote.main || remote.sub), hasL = !!(local.main || local.sub);
+      if (state.homeDirty || (!hasR && hasL)) { // 手元で直した／クラウドに無い → 送る
+        const { error: e2 } = await sb.from("profiles").upsert({ id: uid, home: hasL ? local : null });
+        if (e2) { if (featureMissing(e2) || e2.code === "42703") cloud.home = false; return; }
+        delete state.homeDirty; save();
+      } else if (hasR && canon(remote) !== canon(local)) { // クラウドが正
+        state.home = remote; save(); renderHomeCard(); renderSteps(); renderSpots();
+      }
+    } catch {} finally { cloud.homeBusy = false; }
+  }
   // 招待リンク（?join=コード）で来たとき、ログインをはさんでも忘れないように覚えておく
   const JOIN_KEY = "tabi-navi-join";
   const getPendingJoin = () => { try { return localStorage.getItem(JOIN_KEY) || ""; } catch { return ""; } };
@@ -1169,6 +1190,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     const { data: trips, error } = await sb.from("trips").select("id,title,memo,created_by").order("created_at");
     if (error) throw error;
     cloud.trips = trips;
+    await syncHome();
     if (cloud.coords === null) await probeCoords();
     if (cloud.cost === null) await probeCost();
     const find = id => trips.find(t => t.id === id);
@@ -1472,7 +1494,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
   var menuReady = false; // サイドナビ（PC幅）の件数を、いつも最新にするため。はじめの組み立てが終わるまでは触らない
-  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); if (menuReady && WIDE.matches) openMenu(); }
+  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); renderHomeCard(); if (menuReady && WIDE.matches) openMenu(); }
   // まとめて選んで、エリアを変える
   let bulkMode = true; const bulkSel = new Set();
   function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; const bar = $("bulk-bar"); if (bar) { const was = bar.hidden; bar.hidden = n === 0; if (was && n > 0) renderBulkChips(); } }
@@ -2297,32 +2319,67 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   // 出発点の最寄駅：メイン・サブ（名前のあるものだけ）
   const originLine = () => { const o = originList(); return o.length ? "出発点の最寄駅：" + o.map(x => `${x.label} ${x.name}`).join("／") + "（メインを基本に使う。サブは代わりの乗り場）" : ""; };
   const ORG_LABEL = { main: "メイン", sub: "サブ" };
-  const originList = () => ["main", "sub"].map(k => { const o = (state.plan.origin || {})[k]; return o && o.name ? { key: k, label: ORG_LABEL[k], name: o.name, p: hasPos(o) ? { lat: o.lat, lng: o.lng } : null } : null; }).filter(Boolean);
+  const planOrigin = () => { const o = state.plan.origin || {}; return o.main || o.sub ? o : null; }; // この旅だけの最寄駅（あれば、いつもの最寄駅より先に使う）
+  const effOrigin = () => planOrigin() || state.home || {};
+  const originList = () => ["main", "sub"].map(k => { const o = effOrigin()[k]; return o && o.name ? { key: k, label: ORG_LABEL[k], name: o.name, p: hasPos(o) ? { lat: o.lat, lng: o.lng } : null } : null; }).filter(Boolean);
   const stationQuery = n => /(駅|停|空港|港|ターミナル)$/.test(n) ? n : n + "駅";
-  const orgStatus = key => { const o = (state.plan.origin || {})[key]; return !o || !o.name ? "" : hasPos(o) ? "位置：分かっています" : "位置：まだ分かりません（駅名から自動で調べます）"; };
-  async function locateOrigin(key){
-    const o0 = (state.plan.origin || {})[key]; if (!o0 || hasPos(o0)) return;
+  // store＝"home"（自分のいつもの最寄駅）か "plan"（この旅だけ）
+  const orgStore = store => store === "home" ? (state.home = state.home || {}) : (state.plan.origin = state.plan.origin || {});
+  const orgStatus = (store, key) => { const o = orgStore(store)[key]; return !o || !o.name ? "" : hasPos(o) ? "位置：分かっています" : "位置：まだ分かりません（駅名から自動で調べます）"; };
+  const orgChanged = store => { if (store === "home") { state.homeDirty = true; save(); renderSteps(); renderSpots(); syncHome(); } else changePlan(); };
+  async function locateOrigin(key, store){
+    store = store || (planOrigin() ? "plan" : "home");
+    const o0 = orgStore(store)[key]; if (!o0 || hasPos(o0)) return;
     const nm = o0.name, ll = parseLatLng(nm), g = ll || await geocode({ name: stationQuery(nm) });
-    const o = (state.plan.origin || {})[key]; if (!o || o.name !== nm || hasPos(o)) return;
-    if (g) { o.lat = g.lat; o.lng = g.lng; changePlan(); }
-    const st = document.querySelector(`[data-orgpos="${key}"]`); if (st) st.textContent = orgStatus(key);
+    const o = orgStore(store)[key]; if (!o || o.name !== nm || hasPos(o)) return;
+    if (g) { o.lat = g.lat; o.lng = g.lng; orgChanged(store); }
+    document.querySelectorAll(`[data-orgpos="${store}-${key}"]`).forEach(st => { st.textContent = orgStatus(store, key); });
   }
-  // 手順3の「出発点」の入力欄
-  function originBox(){
-    const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.originBox = "1";
-    box.append(el("b", null, "出発点（最寄駅。2つまで）"), el("span", "note", "自宅などから乗る駅です。メインを1つ、サブ（予備）をもう1つ入れられます。外せない移動の出発地や、日割りの距離の目安に使います。"));
+  // 最寄駅の入力欄（メイン・サブ）。store に保存する
+  function originInputs(store){
+    const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.originInputs = store;
     ["main", "sub"].forEach(key => {
-      const l = el("label", null, key === "main" ? "メインの最寄駅" : "サブの最寄駅（あれば）"), i = mkInput("org-" + key, ORG_LABEL[key] + "の最寄駅", 40); i.placeholder = key === "main" ? "例：新宿駅" : "例：代々木駅"; i.value = ((state.plan.origin || {})[key] || {}).name || "";
-      const st = el("span", "note"); st.dataset.orgpos = key; st.textContent = orgStatus(key);
+      const l = el("label", null, key === "main" ? "メインの最寄駅" : "サブの最寄駅（あれば）"), i = mkInput("org-" + store + "-" + key, ORG_LABEL[key] + "の最寄駅", 40); i.placeholder = key === "main" ? "例：新宿駅" : "例：代々木駅"; i.value = (orgStore(store)[key] || {}).name || "";
+      const st = el("span", "note"); st.dataset.orgpos = store + "-" + key; st.textContent = orgStatus(store, key);
       i.onchange = () => {
-        const v = i.value.trim().slice(0, 40), cur = (state.plan.origin || {})[key];
+        const v = i.value.trim().slice(0, 40), cur = orgStore(store)[key];
         if ((cur ? cur.name : "") === v) return;
-        state.plan.origin = state.plan.origin || {}; if (v) state.plan.origin[key] = { name: v }; else delete state.plan.origin[key];
-        st.textContent = orgStatus(key); changePlan(); renderSteps(); if (v) locateOrigin(key);
+        if (v) orgStore(store)[key] = { name: v }; else delete orgStore(store)[key];
+        st.textContent = orgStatus(store, key); orgChanged(store); renderSteps(); if (v) locateOrigin(key, store);
       };
-      l.append(i); box.append(l, st);
+      l.append(i, st); box.append(l);
     });
     return box;
+  }
+  // 手順3の「出発点」：いつもの最寄駅（設定で登録）を使う。この旅だけ変えることもできる
+  function originBox(){
+    const box = el("div", "stack"); box.style.gap = "6px"; box.dataset.originBox = "1";
+    box.append(el("b", null, "出発点（最寄駅。2つまで）"));
+    const home = ["main", "sub"].filter(k => (state.home || {})[k]).map(k => `${state.home[k].name}（${ORG_LABEL[k]}）`);
+    const rebuild = () => { const body = $("st-3-body"); if (body) { const next = originBox(); box.replaceWith(next); } };
+    const btn = (text, on, cls) => { const b = el("button", cls || "pillbtn", text); b.type = "button"; b.onclick = on; return b; };
+    if (planOrigin()) {
+      box.append(el("span", "note", "この旅だけの最寄駅です。"), originInputs("plan"));
+      const row = el("div", "row"); row.style.gap = "6px";
+      if (planOrigin().main) row.append(btn("いつもの最寄駅にも登録する", () => { state.home = normOrigin(planOrigin()); state.homeDirty = true; save(); renderSteps(); syncHome(); rebuild(); }));
+      if (home.length) row.append(btn("この旅だけの設定をやめる", () => { delete state.plan.origin; changePlan(); renderSteps(); rebuild(); }));
+      box.append(row);
+    } else if (home.length) {
+      box.append(el("span", "note", `いつもの最寄駅：${home.join("・")}（設定で登録ずみ。外せない移動・距離の目安・お願い文に使います）`));
+      const row = el("div", "row"); row.style.gap = "6px";
+      row.append(btn("この旅だけ変える", () => { state.plan.origin = normOrigin(state.home); changePlan(); renderSteps(); rebuild(); }), btn("いつもの最寄駅を変える", () => go("settings")));
+      box.append(row);
+    } else {
+      box.append(el("span", "note", "自宅などから乗る駅です。メインを1つ、サブ（予備）をもう1つ入れられます。「設定」に登録しておくと、どの旅でも使えます。"), originInputs("plan"));
+      const row = el("div", "row"); row.append(btn("設定で、いつもの最寄駅を登録する", () => go("settings"))); box.append(row);
+    }
+    return box;
+  }
+  // 「設定」の自分の情報：いつもの最寄駅
+  function renderHomeCard(){
+    const box = $("home-box"); if (!box) return;
+    if (document.activeElement && box.contains(document.activeElement)) return;
+    box.textContent = ""; box.append(originInputs("home"));
   }
   // 割りふりの基準点：その日の拠点・外せない移動の出発地と到着地・借りる足の受け取りと返却・1区間の足の始点と終点（位置が分かるものだけ）
   function dayRefs(k){
@@ -3643,7 +3700,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   $("import-open").onclick = () => $("import-box").hidden = !$("import-box").hidden;
   $("import-do").onclick = () => {
     try { const s = JSON.parse($("import-text").value); if (!s || !Array.isArray(s.spots)) throw 0;
-      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, plan: normPlan(s.plan), backupAt: Date.now() }; save();
+      state = { spots: s.spots, here: s.here || null, settings: s.settings || {}, plan: normPlan(s.plan), home: normOrigin(s.home), backupAt: Date.now() }; save();
       s.spots.forEach(x => sync.dirty[x.id] = "up"); sync.replaceAll = true; sync.tripDirty = true; sync.planDirty = !planEmpty(state.plan); saveSync();
       location.reload();
     } catch { $("bk-msg").textContent = "データの形がちがうようです。コピーした文をそのまま貼ってください"; }
