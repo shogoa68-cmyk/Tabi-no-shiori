@@ -2325,11 +2325,12 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   const stationQuery = n => /(駅|停|空港|港|ターミナル)$/.test(n) ? n : n + "駅";
   // store＝"home"（自分のいつもの最寄駅）か "plan"（この旅だけ）
   const orgStore = store => store === "home" ? (state.home = state.home || {}) : (state.plan.origin = state.plan.origin || {});
-  const orgStatus = (store, key) => { const o = orgStore(store)[key]; return !o || !o.name ? "" : hasPos(o) ? "位置：分かっています" : "位置：まだ分かりません（駅名から自動で調べます）"; };
+  const orgStatus = (store, key) => { const o = orgStore(store)[key]; return !o || !o.name ? "" : hasPos(o) ? "位置検出 ☑️" : "位置検出 ❌"; };
   const orgChanged = store => { if (store === "home") { state.homeDirty = true; save(); renderSteps(); renderSpots(); syncHome(); } else changePlan(); };
   async function locateOrigin(key, store){
     store = store || (planOrigin() ? "plan" : "home");
     const o0 = orgStore(store)[key]; if (!o0 || hasPos(o0)) return;
+    document.querySelectorAll(`[data-orgpos="${store}-${key}"]`).forEach(st => { st.textContent = "位置検出 …"; });
     const nm = o0.name, ll = parseLatLng(nm), g = ll || await geocode({ name: stationQuery(nm) });
     const o = orgStore(store)[key]; if (!o || o.name !== nm || hasPos(o)) return;
     if (g) { o.lat = g.lat; o.lng = g.lng; orgChanged(store); }
