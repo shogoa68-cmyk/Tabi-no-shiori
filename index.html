@@ -67,8 +67,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .menu-panel hr{border:0;border-top:1px solid var(--line);margin:4px 8px}
 body[data-view=main] [data-v]{display:none!important}
 body:not([data-view=main]):not([data-view=all]) .vmain{display:none!important}
-body[data-view=spots] [data-v]:not([data-v=spots]),body[data-view=days] [data-v]:not([data-v=days]),body[data-view=hubs] [data-v]:not([data-v=hubs]),body[data-view=map] [data-v]:not([data-v=map]),body[data-view=routes] [data-v]:not([data-v=routes]),body[data-view=settings] [data-v]:not([data-v=settings]),body[data-view=edit] [data-v]:not([data-v=edit]){display:none!important}
+body[data-view=spots] [data-v]:not([data-v=spots]),body[data-view=days] [data-v]:not([data-v=days]),body[data-view=hubs] [data-v]:not([data-v=hubs]),body[data-view=map] [data-v]:not([data-v=map]),body[data-view=lmap] [data-v]:not([data-v=lmap]),body[data-view=routes] [data-v]:not([data-v=routes]),body[data-view=settings] [data-v]:not([data-v=settings]),body[data-view=edit] [data-v]:not([data-v=edit]){display:none!important}
 body:not([data-view=main]):not([data-view=all]) details.card>summary{display:none}
+body:not([data-view=lmap]):not([data-view=all]) #lmap-card{display:none}
 .seg{display:flex;gap:4px;background:var(--line);border-radius:14px;padding:4px}
 .seg button{flex:1;font:inherit;font-size:14px;font-weight:700;border:0;background:transparent;color:var(--muted);border-radius:11px;padding:9px 6px;cursor:pointer}
 .seg button[aria-selected=true]{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
@@ -511,6 +512,24 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   #main-sec>*{min-width:0}
   #main-sec>#qa-card,#main-sec>#board-card,#main-sec>#steps,#main-sec>#trip-card,#main-sec>#spots-head,#main-sec>#spots,#main-sec>#spots-note{grid-column:1/-1}
 }
+
+/* 地図で見る（Leaflet。タイルの地図に、登録した場所・拠点・日ごとの順番を重ねる） */
+#lmap{position:relative;z-index:0;isolation:isolate;height:calc(100vh - 250px);min-height:340px;border:1px solid var(--ink);background:var(--paper)}
+#lmap .leaflet-container,#lmap.leaflet-container{font-family:inherit;background:var(--paper)}
+#lmap .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;color:var(--ink);background:var(--paper);border-color:var(--ink)}
+#lmap .leaflet-control-attribution{font-size:10px;background:color-mix(in srgb,var(--paper) 85%,transparent);color:var(--ink)}
+#lmap .leaflet-popup-content-wrapper,#lmap .leaflet-popup-tip{background:var(--paper);color:var(--ink);border:1px solid var(--ink)}
+#lmap .leaflet-popup-content{margin:10px 12px;font:600 14px/1.5 var(--body)}
+#lmap .leaflet-popup-content a{color:var(--atext);font-weight:700}
+.lm-pin{display:grid;place-items:center;width:26px;height:26px;border:2px solid var(--ink);background:var(--paper);color:var(--ink);font:700 13px var(--display)}
+.lm-pin.p3{background:var(--sel-bg);color:var(--sel-fg)}.lm-pin.p2{background:var(--accent-soft)}.lm-pin.p1{background:var(--paper)}
+.lm-pin.n{width:28px;height:28px;background:var(--sel-bg);color:var(--sel-fg);font-size:15px}
+.lm-pin.dim{opacity:.55;width:14px;height:14px;border-width:1.5px}
+.lm-pin.base{background:var(--accent-700);color:#fff;border-color:var(--accent-700)}
+.lm-pin.meal{width:22px;height:22px;border-style:dashed;font-size:11px}
+.lm-pin.ref{width:22px;height:22px;transform:rotate(45deg);border-color:var(--accent-700)}.lm-pin.ref span{transform:rotate(-45deg)}
+.lm-pin.home{background:var(--star);color:#fff;border-color:var(--ink)}
+.lm-chips{display:flex;flex-wrap:wrap;gap:6px}
 </style>
 </head>
 <body data-view="main">
@@ -764,6 +783,12 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   </section>
 
   <!-- 距離マップ（拠点と行きたい場所の位置関係） -->
+  <section class="card stack" id="lmap-card" data-v="lmap" aria-label="地図で見る">
+    <div class="row" id="lm-days" role="group" aria-label="見る日"></div>
+    <div class="row" id="lm-opts"></div>
+    <div id="lmap"></div>
+    <span class="note" id="lm-msg"></span>
+  </section>
   <details class="card" id="map-card" data-v="map" hidden>
     <summary>距離マップ <span class="note" id="map-sum"></span></summary>
     <div class="stack">
@@ -1494,7 +1519,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   const sorted = () => [...state.spots].sort((a,b) => (a.done - b.done) || (b.prio - a.prio) || (likeIds(b.id).length - likeIds(a.id).length) || (a.created - b.created));
 
   var menuReady = false; // サイドナビ（PC幅）の件数を、いつも最新にするため。はじめの組み立てが終わるまでは触らない
-  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); renderHomeCard(); if (menuReady && WIDE.matches) openMenu(); }
+  function renderSpots(){ renderSpotList(); renderMap(); renderHubList(); renderRadiusNote(); renderBoard(); renderSteps(); renderHomeCard(); if (lmReady && document.body.dataset.view === "lmap") renderLiveMap(false); if (menuReady && WIDE.matches) openMenu(); }
   // まとめて選んで、エリアを変える
   let bulkMode = true; const bulkSel = new Set();
   function updateBulk(){ const n = [...bulkSel].filter(id => state.spots.some(x => x.id === id)).length; const e = $("bulk-count"); if (e) e.textContent = `${n}か所を選んでいます`; const bar = $("bulk-bar"); if (bar) { const was = bar.hidden; bar.hidden = n === 0; if (was && n > 0) renderBulkChips(); } }
@@ -3475,8 +3500,8 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   renderPlan();
   applyMode();
   // ---------- 別画面（右上のメニューから行く）：1つの画面にぜんぶ並べず、見たいものだけを出す ----------
-  const VIEWS = { spots: "行きたい場所のリスト", days: "日ごとの詳細（拠点・移動・食事）", hubs: "交通の拠点（駅・バス停など）", map: "距離マップ", routes: "保存したルート", settings: "旅の設定・バックアップ", edit: "場所を詳しく入れる" };
-  const VIEW_EL = { days: "plan-card", hubs: "hub-card", map: "map-card", routes: "routes-card", settings: "settings-card", edit: "add-box" };
+  const VIEWS = { spots: "行きたい場所のリスト", days: "日ごとの詳細（拠点・移動・食事）", hubs: "交通の拠点（駅・バス停など）", lmap: "地図で見る", map: "距離マップ", routes: "保存したルート", settings: "旅の設定・バックアップ", edit: "場所を詳しく入れる" };
+  const VIEW_EL = { lmap: "lmap-card", days: "plan-card", hubs: "hub-card", map: "map-card", routes: "routes-card", settings: "settings-card", edit: "add-box" };
   const curView = () => { if (new URLSearchParams(location.search).get("view") === "all") return "all"; const h = decodeURIComponent(location.hash.replace(/^#/, "")); return VIEWS[h] ? h : "main"; };
   const homeUrl = () => location.pathname + location.search;
   function applyView(){
@@ -3486,6 +3511,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     $("subbar").hidden = !sub; if (sub) $("sub-title").textContent = v === "edit" ? $("add-title").textContent : VIEWS[v];
     if (sub && VIEW_EL[v] && $(VIEW_EL[v]).tagName === "DETAILS") $(VIEW_EL[v]).open = true;
     closeMenu(); if (prev !== v) scrollTo(0, 0);
+    if (v === "lmap") { if (lmReady) renderLiveMap(true); else setTimeout(() => renderLiveMap(true), 0); } // 起動の途中は、後ろの部品がまだ無いので、読みこみがおわってから
   }
   function go(v){
     const cur = curView();
@@ -3509,6 +3535,7 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
     item("spots", VIEWS.spots, `${state.spots.length}か所`);
     item("days", VIEWS.days);
     item("hubs", VIEWS.hubs, `${hubs().length}か所`);
+    item("lmap", VIEWS.lmap);
     if (!$("map-card").hidden) item("map", VIEWS.map);
     if (!$("routes-card").hidden) item("routes", VIEWS.routes);
     item("settings", VIEWS.settings);
@@ -3525,6 +3552,93 @@ pre.prompt{background:transparent;border:1px solid var(--line)}
   // ?add=（Googleマップのリンクなど）で開くと、そのまま登録する（iPhoneの「ショートカット」から使う）
   { const q = new URLSearchParams(location.search).get("add");
     if (q) { stripParams("add"); $("qa-url").value = q; quickAdd(); } }
+
+  // ---------- 地図で見る（Leaflet + 地理院タイル／OpenStreetMap） ----------
+  // Leaflet は、この画面を開いたときだけ、版を固定して cdnjs から読みこむ（読めなければ、メッセージを出して他の画面はふつうに使える）
+  const LEAFLET = { js: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js", css: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" };
+  const LM_TILES = {
+    gsi: { name: "日本（地理院地図）", url: "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", max: 18, attr: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>' },
+    osm: { name: "世界（OpenStreetMap）", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", max: 19, attr: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' }
+  };
+  var lmReady = false; // 起動のとき、この下の部品がそろったか
+  let lm = null, lmDay = "all", lmShowDone = false;
+  async function ensureLeaflet(){
+    if (window.L && window.L.map) return true;
+    try {
+      if (!document.querySelector("link[data-leaflet]")) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = LEAFLET.css; l.dataset.leaflet = "1"; document.head.append(l); }
+      await loadScript(LEAFLET.js);
+    } catch { return false; }
+    return !!(window.L && window.L.map);
+  }
+  // 1日の順番（時刻の計算と同じ並び）：朝の拠点→食事・外せない移動・場所→夜の拠点。位置が分かるものだけ
+  function lmDayStops(k){
+    const list = dayList(), i = list.indexOf(k); if (i < 0) return [];
+    const da = dayAt(list, i), sch = daySchedule(k, da), out = []; let n = 0;
+    if (i === 0) originList().forEach(o => { if (o.p) out.push({ t: "home", name: `${o.name}（${o.label}の最寄駅）`, p: o.p, mark: "駅" }); });
+    sch.evs.forEach(e => {
+      if (e.type === "base") { const b = e.base; if (b && hasBase(b) && hasPos(b)) out.push({ t: "base", name: `${e.slot === "am" ? "朝" : "夜"}の拠点：${baseName(b)}`, p: b, mark: e.slot === "am" ? "朝" : "夜", line: true }); }
+      else if (e.type === "meal") { const pt = mealPoint(k, e.key); if (pt) out.push({ t: "meal", name: `${e.label}${e.m && e.m.name ? "：" + e.m.name : ""}`, p: pt, mark: e.label.slice(0, 1), line: true }); }
+      else if (e.type === "move") { const f = moveEnd(e.m, "from"), t2 = moveEnd(e.m, "to"); if (f) out.push({ t: "ref", name: `${e.m.from}（出発）`, p: f, mark: "発", line: true }); if (t2) out.push({ t: "ref", name: `${e.m.to}（到着）`, p: t2, mark: "着", line: true }); }
+      else if (e.type === "slot") e.items.forEach(it => { if (it.free || !it.s || !hasPos(it.s)) return; out.push({ t: "spot", s: it.s, p: it.s, n: ++n, line: true }); });
+    });
+    return out;
+  }
+  function lmPopup(title, spot, extra){
+    const d = el("div"); d.append(el("b", null, title));
+    if (spot) {
+      const w = whereIs(spot.id); const bits = [spot.area, w ? `${w.i + 1}日目 ${SLOT_SHORT[w.sl]}` : "まだ割りふっていません", costOf(spot) ? yenIf(spot) : ""].filter(Boolean);
+      d.append(document.createElement("br"), el("span", "note", bits.join("　")), document.createElement("br"), mapLink(spotMapUrl(spot), "Googleマップで開く"));
+    } else if (extra) d.append(document.createElement("br"), el("span", "note", extra));
+    return d;
+  }
+  async function renderLiveMap(first){
+    const box = $("lmap"), msg = $("lm-msg"); if (!box) return;
+    // 上の操作（見る日・地図の種類・行った場所）
+    const list = dayList(); if (lmDay !== "all" && !list.includes(lmDay)) lmDay = "all";
+    const days = $("lm-days"); days.textContent = ""; days.classList.add("lm-chips");
+    [["all", "ぜんぶ"], ...list.map((k, i) => [k, `${i + 1}日目`])].forEach(([k, t]) => { const b = el("button", "pillbtn", t); b.type = "button"; b.dataset.day = k; b.setAttribute("aria-pressed", lmDay === k ? "true" : "false"); b.onclick = () => { lmDay = k; renderLiveMap(false); }; days.append(b); });
+    const opts = $("lm-opts"); opts.textContent = ""; opts.classList.add("lm-chips");
+    const tileKey = state.settings["lmap-tile"] === "osm" ? "osm" : state.settings["lmap-tile"] === "gsi" ? "gsi" : null;
+    const pts0 = state.spots.filter(sp => hasPos(sp)); const jp = !pts0.length || pts0.filter(sp => sp.lat > 20 && sp.lat < 46.5 && sp.lng > 122 && sp.lng < 154.5).length * 2 >= pts0.length;
+    const tk = tileKey || (jp ? "gsi" : "osm");
+    Object.keys(LM_TILES).forEach(k => { const b = el("button", "pillbtn", LM_TILES[k].name); b.type = "button"; b.dataset.tile = k; b.setAttribute("aria-pressed", tk === k ? "true" : "false"); b.onclick = () => { state.settings["lmap-tile"] = k; save(); renderLiveMap(false); }; opts.append(b); });
+    const dl = el("label", "row"); dl.style.cssText = "flex-direction:row;gap:6px;font-size:13.5px;color:var(--ink)"; const dc = el("input"); dc.type = "checkbox"; dc.style.width = "auto"; dc.id = "lm-done"; dc.checked = lmShowDone; dc.onchange = () => { lmShowDone = dc.checked; renderLiveMap(false); }; dl.append(dc, document.createTextNode("行った場所も出す")); opts.append(dl);
+    if (!(await ensureLeaflet())) { msg.textContent = "地図の部品を読みこめませんでした（通信を確認してください）。"; return; }
+    msg.textContent = "";
+    const L = window.L;
+    if (!lm || lm.box !== box || !box.classList.contains("leaflet-container")) { lm = { box, map: L.map(box, { zoomControl: true, attributionControl: true }), layer: null, tile: null, tileKey: "", fitted: false }; lm.map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'); lm.map.setView([35.68, 139.76], 11); }
+    const map = lm.map;
+    if (lm.tileKey !== tk) {
+      if (lm.tile) map.removeLayer(lm.tile);
+      const t = LM_TILES[tk]; lm.tile = L.tileLayer(t.url, { maxZoom: t.max, attribution: t.attr }).addTo(map); lm.tileKey = tk;
+      let warned = false; lm.tile.on("tileerror", () => { if (!warned) { warned = true; $("lm-msg").textContent = "地図の画像を取れませんでした（通信を確認してください）。点は出ています。"; } });
+    }
+    if (lm.layer) map.removeLayer(lm.layer); lm.layer = L.layerGroup().addTo(map);
+    const pts = [], pin = (p, cls, text, popup, z) => { const m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html: `<div class="lm-pin ${cls}"><span>${text}</span></div>`, iconSize: [28, 28], iconAnchor: [14, 14] }), zIndexOffset: z || 0, keyboard: false }).bindPopup(popup, { maxWidth: 240 }); m.addTo(lm.layer); if (!/\bhome\b/.test(cls)) pts.push([p.lat, p.lng]); return m; }; // 遠い自宅の最寄駅は、見える範囲を決めるときに入れない（拡大・縮小で見られる）
+    const open = state.spots.filter(sp => hasPos(sp) && (lmShowDone || !sp.done));
+    if (lmDay === "all") {
+      open.forEach(sp => pin(sp, "p" + sp.prio, sp.prio === 3 ? "★" : sp.prio === 2 ? "☆" : "・", lmPopup(sp.name, sp)));
+      list.forEach((k, i) => { const da = dayAt(list, i); [["am", "朝"], ["pm", "夜"]].forEach(([sl, mk]) => { const b = effBase(list, i, sl); if (b && hasBase(b) && hasPos(b) && !pts.some(q => q[0] === b.lat && q[1] === b.lng && false)) pin(b, "base", mk, lmPopup(`${i + 1}日目 ${mk}の拠点：${baseName(b)}`, null, ""), 500); }); });
+      originList().forEach(o => { if (o.p) pin(o.p, "home", "駅", lmPopup(`${o.name}（${o.label}の最寄駅）`, null, "出発点"), 600); });
+      hubs().forEach(h => { if (hasPos(h)) pin(h, "ref", "駅", lmPopup(`${h.name}（${h.kind}）`, null, h.address || ""), 100); });
+    } else {
+      const stops = lmDayStops(lmDay), onDay = new Set(stops.filter(x => x.t === "spot").map(x => x.s.id));
+      open.filter(sp => !onDay.has(sp.id) && !whereIs(sp.id)).forEach(sp => pin(sp, "dim p" + sp.prio, "", lmPopup(sp.name, sp), -100)); // まだ割りふっていない場所（うすく）
+      const line = [];
+      stops.forEach(x => {
+        if (x.t === "spot") pin(x.p, "n", String(x.n), lmPopup(`${x.n}. ${x.s.name}`, x.s), 300);
+        else pin(x.p, x.t === "base" ? "base" : x.t === "meal" ? "meal" : x.t === "home" ? "home" : "ref", x.mark, lmPopup(x.name, null, ""), 200);
+        if (x.line) line.push([x.p.lat, x.p.lng]);
+      });
+      if (line.length > 1) L.polyline(line, { color: getComputedStyle(document.body).getPropertyValue("--accent-700").trim() || "#3b5d80", weight: 3, dashArray: "6 6", opacity: .9 }).addTo(lm.layer);
+      if (!stops.length) msg.textContent = "この日は、位置の分かる予定がまだありません。";
+    }
+    if (!pts.length) { if (!msg.textContent) msg.textContent = "地図に出せる場所がまだありません（位置が分かる場所だけ出ます）。"; }
+    map.invalidateSize();
+    if (pts.length && (first || !lm.fitted || true)) { map.fitBounds(L.latLngBounds(pts).pad(0.15), { maxZoom: 16, animate: false }); lm.fitted = true; }
+  }
+
+  lmReady = true;
 
   // ---------- Claude へのお願い文を作る ----------
   const SITUATION = {
